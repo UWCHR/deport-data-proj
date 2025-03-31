@@ -1,0 +1,90 @@
+---
+title: "ICE ERO-LESA detainers data Nov. 2023-Feb. 2025"
+author: "UWCHR"
+date: "2025-03-25"
+output:
+    html_document:
+        html_preview: true
+        toc: true
+        toc_depth: 3
+        toc_float: true
+        code_folding: hide
+---
+
+
+```{r setup, message=FALSE, warning=FALSE, include=TRUE}
+
+options(scipen = 1000000)
+
+library(pacman)
+
+p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl)
+
+file <- "ERO Detainers_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
+
+det <- read_excel(here('analyze', 'input', file), skip=6) %>% 
+  janitor::clean_names()
+
+det <- det %>% 
+  mutate(date_diff = difftime(detainer_prepare_date, apprehension_date, units = "days"))
+
+```
+
+```{r wa_detainers}
+
+wa <- det %>% 
+  filter(facility_state == "WASHINGTON")
+
+tab1 <- wa %>% 
+  mutate(app_date_not_null = !is.na(apprehension_date)) %>% 
+  group_by(detention_facility) %>% 
+  summarize(n = n(),
+            app_date_not_null = sum(app_date_not_null),
+            mean_date_diff = mean(date_diff, na.rm = TRUE))
+
+tab2 <- det %>% 
+  group_by(facility_aor) %>% 
+  summarize(n = n(),
+            med_date_diff = median(date_diff, na.rm = TRUE))
+
+```
+
+```{r setup_arrests}
+
+file <- "ERO Admin Arrests_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
+
+arr <- read_excel(here('analyze', 'input', file), skip=6) %>% 
+  janitor::clean_names() %>% 
+  mutate(apprehension_date = as.Date(apprehension_date)) |>
+  mutate(apprehension_method = fct(apprehension_method)) |>
+  mutate(criminality = apprehension_criminality == "1 Convicted Criminal") |>
+  mutate(n_dupe = row_number(), .by = c("apprehension_date", "apprehension_method", "apprehension_criminality", "unique_identifier")) |>
+  filter(is.na(unique_identifier) | n_dupe == 1)
+
+arr_ids <- arr$unique_identifier
+
+det <- det %>% 
+  mutate(id_in_arrests = unique_identifier %in% arr_ids)
+
+tab1 <- det %>% 
+  filter(facility_state == "WASHINGTON") %>% 
+  group_by(detention_facility) %>% 
+  summarize(n = n(),
+            id_in_arrests = sum(id_in_arrests))
+
+tab2 <- det %>% 
+  group_by(facility_aor) %>% 
+  summarize(n = n(),
+            id_in_arrests = sum(id_in_arrests)) %>% 
+  mutate(pct = id_in_arrests / n) %>% 
+  arrange(desc(pct))
+
+temp <- det %>% 
+  filter(facility_state == "WASHINGTON") %>%
+  filter(!str_detect(detention_facility, "SHELTON|SEATAC|MARSHALS|STAFFORD|STATE|NW ICE")) %>% 
+  dplyr::select(detainer_prepare_date, detention_facility, apprehension_method, apprehension_date, id_in_arrests) %>% 
+  arrange(desc(detainer_prepare_date))
+
+```
+
+
