@@ -1,0 +1,121 @@
+---
+title: "ICE ERO-LESA arrests data Nov. 2023-Feb. 2025"
+author: "UWCHR"
+date: "2025-03-25"
+output:
+    html_document:
+        html_preview: true
+        toc: true
+        toc_depth: 3
+        toc_float: true
+        code_folding: hide
+---
+
+
+```{r setup, message=FALSE, warning=FALSE, include=TRUE}
+
+options(scipen = 1000000)
+
+library(pacman)
+
+p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl)
+
+```
+
+```{r setup_encounters}
+
+file <- "ERO Encounters_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
+
+encounter_df<- read_excel(here('analyze', 'input', file), skip=6) %>% 
+  janitor::clean_names() %>% 
+  mutate(event_date = as.Date(event_date, format="%m/%d/%Y"),
+         event_fy = substr(quarter(event_date, fiscal_start = 10, type = "year.quarter"), 1, 4),
+         event_yearmon = as.yearmon(event_date))
+
+encounter_ids <- unique(encounter_df$unique_identifier)
+
+```
+
+```{r}
+
+encounter_df %>% 
+  count(responsible_site) %>% 
+  arrange(desc(n))
+
+encounter_df %>% 
+  count(lead_event_type) %>% 
+  arrange(desc(n))
+
+encounter_df %>% 
+  count(lead_source) %>% 
+  arrange(desc(n))
+
+encounter_df %>% 
+  count(event_type) %>% 
+  arrange(desc(n))
+
+encounter_df %>% 
+  count(processing_disposition) %>% 
+  arrange(desc(n))
+
+encounter_df %>% 
+  count(case_status) %>% 
+  arrange(desc(n))
+
+encounter_df %>% 
+  count(final_order_yes_no) %>% 
+  arrange(desc(n))
+
+
+```
+
+```{r perc}
+
+perc_encounters <- encounter_df %>% 
+  filter(responsible_site == "ERO - Pacific Enforcement Response Center")
+
+perc_encounters %>% 
+  count(final_order_yes_no) %>% 
+  arrange(desc(n))
+
+perc_encounters %>% 
+  count(event_type) %>% 
+  arrange(desc(n))
+
+perc_encounters %>% 
+  count(lead_source) %>% 
+  arrange(desc(n))
+
+perc_encounters %>% 
+  count(processing_disposition) %>% 
+  arrange(desc(n))
+
+```
+
+```{r}
+
+top_processing_disp <- encounter_df %>%
+  count(processing_disposition) %>% 
+  arrange(desc(n)) %>% 
+  head(10)
+
+dat <- encounter_df %>% 
+  mutate(processing_disposition = case_when(processing_disposition %in% unlist(top_processing_disp$processing_disposition) ~ processing_disposition,
+         TRUE ~ "All others")) %>% 
+  count(event_yearmon, processing_disposition) 
+
+p1 <- dat %>% 
+  ggplot(aes(x = event_yearmon, y = n, fill = processing_disposition)) +
+  geom_col() +
+  facet_wrap(~processing_disposition)
+
+p1
+
+p1 <- dat %>%
+  filter(processing_disposition == "Prosecutorial Discretion") %>% 
+  ggplot(aes(x = event_yearmon, y = n, fill = processing_disposition)) +
+  geom_col()
+
+p1
+
+```

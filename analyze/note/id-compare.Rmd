@@ -36,6 +36,17 @@ detainer_ids <- unique(detainer_df$unique_identifier)
 
 ```
 
+```{r setup_encounters}
+
+file <- "ERO Encounters_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
+
+encounter_df<- read_excel(here('analyze', 'input', file), skip=6) %>% 
+  janitor::clean_names() %>% 
+  mutate(event_date = as.Date(event_date))
+
+encounter_ids <- unique(encounter_df$unique_identifier)
+
+```
 
 ```{r setup_arrests}
 
@@ -62,7 +73,9 @@ detention_df <- read_excel(here('analyze', 'input', file), skip=6) %>%
   mutate(stay_book_in_date_time = as.Date(stay_book_in_date_time, format = "%m/%d/%Y %H:%M"),
          book_in_date_time = as.Date(book_in_date_time, format = "%m/%d/%Y %H:%M"),
          stay_book_out_date_time = as.Date(stay_book_out_date_time, format = "%m/%d/%Y %H:%M"),
-         stay_book_in_date_time = as.Date(stay_book_out_date, format = "%m/%d/%Y %H:%M"))
+         stay_book_in_date_time = as.Date(stay_book_out_date, format = "%m/%d/%Y %H:%M"),
+         book_in_fy = substr(quarter(book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4),
+         stay_book_in_fy = substr(quarter(stay_book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4))
 
 detention_ids <- unique(detention_df$unique_identifier)
 
@@ -70,9 +83,10 @@ detention_ids <- unique(detention_df$unique_identifier)
 
 ```{r compare_sets}
 
-sets <- list("detentions" = detention_ids,
+sets <- list("encounters" = encounter_ids,
+             "detainers" = detainer_ids,
              "arrests" = arrest_ids,
-             "detainers" = detainer_ids)
+             "detentions" = detention_ids)
 
 p1 <- ggVennDiagram(x = sets,
                     color = name,
@@ -113,12 +127,5 @@ dat <- detention_df %>%
   summarize(id_in_arrests_mean = mean(id_in_arrests))
 
 dat
-
-
-detention_df <- detention_df %>% 
-  mutate(book_in_fy = substr(quarter(book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4),
-         stay_book_in_fy = substr(quarter(stay_book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4))
-
-hist(as.numeric(detention_df$book_in_fy))
 
 ```
