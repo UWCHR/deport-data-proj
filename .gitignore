@@ -14,3 +14,4 @@
 *.xlsx
 *.log
 write/output/*
+!analyze/input/facilities.csv.gz
