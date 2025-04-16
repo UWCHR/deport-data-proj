@@ -1,0 +1,147 @@
+---
+title: "Comparison of anonymized identifiers across datasets"
+author: "UWCHR"
+date: "2025-03-31"
+output:
+    html_document:
+        html_preview: true
+        toc: true
+        toc_depth: 3
+        toc_float: true
+        code_folding: hide
+---
+
+
+```{r setup, message=FALSE, warning=FALSE, include=TRUE}
+
+options(scipen = 1000000)
+
+library(pacman)
+
+p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, ggVennDiagram)
+
+```
+
+```{r setup_detainers}
+
+file <- "ERO Detainers_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
+
+detainer_df<- read_excel(here('analyze', 'input', file), skip=6) %>% 
+  janitor::clean_names()
+
+detainer_df<- detainer_df%>% 
+  mutate(date_diff = difftime(detainer_prepare_date, apprehension_date, units = "days"))
+
+detainer_ids <- unique(detainer_df$unique_identifier)
+
+```
+
+```{r setup_encounters}
+
+file <- "ERO Encounters_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
+
+encounter_df<- read_excel(here('analyze', 'input', file), skip=6) %>% 
+  janitor::clean_names() %>% 
+  mutate(event_date = as.Date(event_date))
+
+encounter_ids <- unique(encounter_df$unique_identifier)
+
+```
+
+```{r setup_arrests}
+
+file <- "ERO Admin Arrests_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
+
+arrest_df<- read_excel(here('analyze', 'input', file), skip=6) %>% 
+  janitor::clean_names() %>% 
+  mutate(apprehension_date = as.Date(apprehension_date)) |>
+  mutate(apprehension_method = fct(apprehension_method)) |>
+  mutate(criminality = apprehension_criminality == "1 Convicted Criminal") |>
+  mutate(n_dupe = row_number(), .by = c("apprehension_date", "apprehension_method", "apprehension_criminality", "unique_identifier")) |>
+  filter(is.na(unique_identifier) | n_dupe == 1)
+
+arrest_ids <- unique(arrest_df$unique_identifier)
+
+```
+
+```{r setup_detention}
+
+file <- "ICE Detentions_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
+
+detention_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
+  janitor::clean_names() %>% 
+  mutate(stay_book_in_date_time = as.Date(stay_book_in_date_time, format = "%m/%d/%Y %H:%M"),
+         book_in_date_time = as.Date(book_in_date_time, format = "%m/%d/%Y %H:%M"),
+         stay_book_out_date_time = as.Date(stay_book_out_date_time, format = "%m/%d/%Y %H:%M"),
+         stay_book_in_date_time = as.Date(stay_book_out_date, format = "%m/%d/%Y %H:%M"),
+         book_in_fy = substr(quarter(book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4),
+         stay_book_in_fy = substr(quarter(stay_book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4))
+
+detention_ids <- unique(detention_df$unique_identifier)
+
+```
+
+```{r compare_sets}
+
+sets <- list("encounters" = encounter_ids,
+             "detainers" = detainer_ids,
+             "arrests" = arrest_ids,
+             "detentions" = detention_ids)
+
+p1 <- ggVennDiagram(x = sets,
+                    color = name,
+                    label = "count") +
+  scale_fill_gradient(low = "#F4FAFE", high = "#4981BF")
+
+p1
+
+p2 <- ggVennDiagram(x = sets,
+              force_upset = TRUE, order.set.by = "name", order.intersect.by = "size"
+              )
+
+p2 
+
+```
+
+```{r setup_id_intersect_cols}
+
+detention_df <- detention_df |>
+  mutate(id_in_arrests = unique_identifier %in% arrest_ids,
+         id_in_detainers = unique_identifier %in% detainer_ids)
+
+arrest_df<- arrest_df|>
+  mutate(id_in_detentions = unique_identifier %in% detention_ids,
+         id_in_detainers = unique_identifier %in% detainer_ids)
+
+detainer_df<- detainer_df|>
+  mutate(id_in_arrests = unique_identifier %in% arrest_ids,
+         id_in_detainers = unique_identifier %in% detainer_ids)
+
+detainer_df
+
+```
+
+```{r}
+
+dat <- detention_df %>% 
+  mutate(fy = substr(quarter(book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4)) %>% 
+  group_by(fy) %>% 
+  summarize(id_in_arrests_mean = mean(id_in_arrests))
+
+dat
+
+```
+
+```{r}
+joined_df <- inner_join(detainer_df, arrest_df, by="unique_identifier", na_matches="never")
+joined_df<- joined_df%>% 
+  mutate(detainer_date_diff = difftime(detainer_prepare_date, apprehension_date.y, units = "days"))
+
+filtered_joined_df <- filter(joined_df, detainer_date_diff < 2 & facility_state == "WASHINGTON" & !(detention_facility %in% c("SEATAC FED.DET.CENTER", "STATE PRISON, SHELTON")))
+filtered_joined_df[c("detainer_prepare_date", "apprehension_date.y", "unique_identifier", "detention_facility")]
+```
+```{r}
+ggplot(filtered_joined_df, mapping=aes(x=detention_facility)) +
+  geom_bar() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
