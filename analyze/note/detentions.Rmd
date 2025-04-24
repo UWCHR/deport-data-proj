@@ -121,7 +121,126 @@ sum(df$known_facil) / nrow(df)
 unknown_facil <- unique(df[df$known_facil == FALSE, c("detention_facility_code", "detention_facility")]) %>% 
   arrange(detention_facility)
 
+to_join <- known_facil %>% 
+  dplyr::select(detloc, aor, state) %>% 
+  rename(detention_facility_code = detloc,
+         detention_facility_aor = aor,
+         detention_facility_state = state)
+
+df <- df %>% 
+  left_join(to_join, by="detention_facility_code")
+
+df <- df %>% 
+  mutate(detention_facility_region = case_when(detention_facility_aor == "ATL" ~ "Interior/Northern",
+detention_facility_aor == "BAL" ~ "Interior/Northern",
+detention_facility_aor == "BOS" ~ "Interior/Northern",
+detention_facility_aor == "BUF" ~ "Interior/Northern",
+detention_facility_aor == "CHI" ~ "Interior/Northern",
+detention_facility_aor == "DAL" ~ "Interior/Northern",
+detention_facility_aor == "DEN" ~ "Interior/Northern",
+detention_facility_aor == "DET" ~ "Interior/Northern",
+detention_facility_aor == "ELP" ~ "Southern",
+detention_facility_aor == "HOU" ~ "Southern",
+detention_facility_aor == "LOS" ~ "Interior/Northern",
+detention_facility_aor == "MIA" ~ "Interior/Northern",
+detention_facility_aor == "NEW" ~ "Interior/Northern",
+detention_facility_aor == "NOL" ~ "Interior/Northern",
+detention_facility_aor == "NYC" ~ "Interior/Northern",
+detention_facility_aor == "PHI" ~ "Interior/Northern",
+detention_facility_aor == "PHO" ~ "Southern",
+detention_facility_aor == "SEA" ~ "Interior/Northern",
+detention_facility_aor == "SFR" ~ "Interior/Northern",
+detention_facility_aor == "SLC" ~ "Interior/Northern",
+detention_facility_aor == "SNA" ~ "Southern",
+detention_facility_aor == "SND" ~ "Southern",
+detention_facility_aor == "SPM" ~ "Interior/Northern",
+detention_facility_aor == "WAS" ~ "Interior/Northern"))
+
 ```
+
+```{r bookins_by_aor_state}
+
+bookins_aor <- df %>% 
+  filter(placement_count == 1,
+         stay_book_in_date_time >= "2024-01-01"
+         ) %>% 
+  mutate(yearmon = as.yearmon(stay_book_in_date_time),
+         week = floor_date(stay_book_in_date_time, "week", week_start = "Monday")) %>% 
+  count(week, detention_facility_aor)
+
+p1 <- bookins_aor %>% 
+  filter(week != as_datetime("2025-02-17")) %>% 
+  ggplot(aes(x = week, y = n, color = detention_facility_aor)) +
+  geom_line() +
+  # geom_vline(xintercept=as_datetime("2025-01-20"), linetype="dashed") +
+  facet_wrap(~detention_facility_aor, scales = "free_y") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  labs(title = "ICE detention book-ins in interior surged post-inauguration...",
+       subtitle = "ICE weekly detention book-ins by detention facility AOR")
+
+
+p1
+
+bookins_region <- df %>% 
+  filter(placement_count == 1,
+         stay_book_in_date_time >= "2024-01-01"
+         ) %>% 
+  mutate(yearmon = as.yearmon(stay_book_in_date_time),
+         week = floor_date(stay_book_in_date_time, "week", week_start = "Monday")) %>% 
+  count(week, detention_facility_region)
+
+p1.1 <- bookins_region %>% 
+  filter(week != as_datetime("2025-02-17"),
+         !is.na(detention_facility_region)) %>% 
+  ggplot(aes(x = week, y = n, color = detention_facility_region)) +
+  geom_line() +
+  geom_vline(xintercept=as_datetime("2025-01-20"), linetype="dashed") +
+  ylim(0,NA) +
+  facet_wrap(~detention_facility_region) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  labs(title = "ICE detention book-ins in interior surged post-inauguration...",
+       subtitle = "ICE weekly detention book-ins by detention facility AOR")
+
+
+p1.1
+
+bookins_natl <- df %>% 
+  filter(placement_count == 1,
+         stay_book_in_date_time >= "2024-01-01"
+         ) %>% 
+  mutate(yearmon = as.yearmon(stay_book_in_date_time),
+         week = floor_date(stay_book_in_date_time, "week", week_start = "Monday")) %>% 
+  count(week)
+
+p2 <- bookins_natl %>% 
+  filter(week != as_datetime("2025-02-17")) %>% 
+  ggplot(aes(x = week, y = n)) +
+  geom_line() +
+  geom_vline(xintercept=as_datetime("2025-01-20"), linetype="dashed") +
+  ylim(0,NA) +
+  labs(title = "...but remained mostly stable nationwide in initial weeks of Trump II",
+       subtitle = "ICE weekly detention book-ins nationwide")
+
+
+p2
+
+# bookins_state <- df %>% 
+#   filter(placement_count == 1,
+#          book_in_date_time >= "2023-10-01"
+#          ) %>% 
+#   mutate(yearmon = as.yearmon(book_in_date_time),
+#          week = floor_date(book_in_date_time, "week", week_start = "Monday")) %>% 
+#   count(week, detention_facility_state)
+# 
+# p2 <- bookins_state %>% 
+#   filter(week != as_datetime("2025-02-17")) %>% 
+#   ggplot(aes(x = week, y = n, color = detention_facility_state)) +
+#   geom_line()
+# 
+# p2
+
+```
+
 
 ```{r get_wa_arrests}
 
@@ -162,6 +281,8 @@ wa_det %>%
   arrange(desc(n))
 
 ```
+
+
 
 ```{r headcounter_setup, message=FALSE, warning=FALSE, include=TRUE}
 
@@ -213,6 +334,30 @@ p1 <- example_headcount_data %>%
   ggplot(aes(x = date, y = n, color = gender), group = gender ) +
   geom_line() +
   labs(title = "Daily detained population by `gender`",
+       subtitle = "Northwest ICE Processing Center")
+
+p1
+
+```
+
+```{r facil_headcount_final_prog}
+
+# Generate limited sample dataset
+temp_df <- df %>% 
+  filter(detention_facility_code == "CSCNWWA")
+
+# Apply function to timeline
+example_headcount <- lapply(timeline, headcounter, df=temp_df, group_vars=c('final_program_group'))
+
+# Transform output into data frame
+example_headcount_data <- map_dfr(example_headcount, bind_rows)
+
+# Plot headcount
+p1 <- example_headcount_data %>% 
+  filter(date >= "2023-11-15") %>% 
+  ggplot(aes(x = date, y = n, fill = final_program_group), group = final_program_group ) +
+  geom_area() +
+  labs(title = "Daily detained population by `final_program_group`",
        subtitle = "Northwest ICE Processing Center")
 
 p1
