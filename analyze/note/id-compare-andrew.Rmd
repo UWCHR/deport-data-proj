@@ -1,5 +1,5 @@
 ---
-title: "Comparison of anonymized identifiers across datasets"
+title: "Analysis of Detainers of Interest"
 author: "UWCHR"
 date: "2025-03-31"
 output:
@@ -11,45 +11,39 @@ output:
         code_folding: hide
 ---
 
-
+# Setup
 ```{r setup, message=FALSE, warning=FALSE, include=TRUE}
-
 options(scipen = 1000000)
 
 library(pacman)
 
 p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, ggVennDiagram)
-
 ```
 
 ```{r setup_detainers}
-
 file <- "ERO Detainers_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
 
-detainer_df<- read_excel(here('analyze', 'input', file), skip=6) %>% 
+detainer_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
   janitor::clean_names()
 
-detainer_df<- detainer_df%>% 
-  mutate(date_diff = difftime(detainer_prepare_date, apprehension_date, units = "days"))
+detainer_df <- detainer_df%>% 
+  mutate(date_diff = difftime(detainer_prepare_date, apprehension_date, units='days')) %>% 
+  rename_with(~ paste(., "detainer", sep="."), .cols=-unique_identifier)
 
-detainer_ids <- unique(detainer_df$unique_identifier)
-
+detainer_df_wa <- detainer_df %>% 
+  filter(facility_state.detainer == "WASHINGTON")
 ```
 
 ```{r setup_encounters}
-
 file <- "ERO Encounters_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
 
-encounter_df<- read_excel(here('analyze', 'input', file), skip=6) %>% 
+encounter_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
   janitor::clean_names() %>% 
-  mutate(event_date = as.Date(event_date))
-
-encounter_ids <- unique(encounter_df$unique_identifier)
-
+  mutate(event_date = as.Date(event_date)) %>% 
+  rename_with(~ paste(., "encounter", sep="."), .cols=-unique_identifier)
 ```
 
 ```{r setup_arrests}
-
 file <- "ERO Admin Arrests_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
 
 arrest_df<- read_excel(here('analyze', 'input', file), skip=6) %>% 
@@ -58,14 +52,11 @@ arrest_df<- read_excel(here('analyze', 'input', file), skip=6) %>%
   mutate(apprehension_method = fct(apprehension_method)) |>
   mutate(criminality = apprehension_criminality == "1 Convicted Criminal") |>
   mutate(n_dupe = row_number(), .by = c("apprehension_date", "apprehension_method", "apprehension_criminality", "unique_identifier")) |>
-  filter(is.na(unique_identifier) | n_dupe == 1)
-
-arrest_ids <- unique(arrest_df$unique_identifier)
-
+  filter(is.na(unique_identifier) | n_dupe == 1) %>% 
+  rename_with(~ paste(., "arrest", sep="."), .cols=-unique_identifier)
 ```
 
 ```{r setup_detention}
-
 file <- "ICE Detentions_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
 
 detention_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
@@ -75,73 +66,148 @@ detention_df <- read_excel(here('analyze', 'input', file), skip=6) %>%
          stay_book_out_date_time = as.Date(stay_book_out_date_time, format = "%m/%d/%Y %H:%M"),
          stay_book_in_date_time = as.Date(stay_book_out_date, format = "%m/%d/%Y %H:%M"),
          book_in_fy = substr(quarter(book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4),
-         stay_book_in_fy = substr(quarter(stay_book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4))
-
-detention_ids <- unique(detention_df$unique_identifier)
-
+         stay_book_in_fy = substr(quarter(stay_book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4)) %>% 
+  rename_with(~ paste(., "detention", sep="."), .cols=-unique_identifier)
 ```
 
-```{r compare_sets}
-
-sets <- list("encounters" = encounter_ids,
-             "detainers" = detainer_ids,
-             "arrests" = arrest_ids,
-             "detentions" = detention_ids)
-
-p1 <- ggVennDiagram(x = sets,
-                    color = name,
-                    label = "count") +
-  scale_fill_gradient(low = "#F4FAFE", high = "#4981BF")
-
-p1
-
-p2 <- ggVennDiagram(x = sets,
-              force_upset = TRUE, order.set.by = "name", order.intersect.by = "size"
-              )
-
-p2 
-
-```
-
-```{r setup_id_intersect_cols}
-
-detention_df <- detention_df |>
-  mutate(id_in_arrests = unique_identifier %in% arrest_ids,
-         id_in_detainers = unique_identifier %in% detainer_ids)
-
-arrest_df<- arrest_df|>
-  mutate(id_in_detentions = unique_identifier %in% detention_ids,
-         id_in_detainers = unique_identifier %in% detainer_ids)
-
-detainer_df<- detainer_df|>
-  mutate(id_in_arrests = unique_identifier %in% arrest_ids,
-         id_in_detainers = unique_identifier %in% detainer_ids)
-
-detainer_df
-
-```
-
+# Unique Identifier Analysis
 ```{r}
-
-dat <- detention_df %>% 
-  mutate(fy = substr(quarter(book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4)) %>% 
-  group_by(fy) %>% 
-  summarize(id_in_arrests_mean = mean(id_in_arrests))
-
-dat
-
+# Counts the number of times each unique identifier appears and the number of unique identifiers per count
+summarize_id_counts <- function(df) {
+  id_count <- df %>% 
+    count(unique_identifier, sort=TRUE, name="count") %>% 
+    mutate(prop = count / nrow(df))
+  
+  count_analysis <- id_count %>% 
+    count(count, sort=TRUE, name="num_ids") %>% 
+    mutate(prop = num_ids / nrow(id_count))
+  
+  print(id_count)
+  print(count_analysis)
+  
+  num_missing <- unlist(id_count[is.na(id_count$unique_identifier), 2], use.names=FALSE)
+  prop_missing <- unlist(id_count[is.na(id_count$unique_identifier), 3], use.names=FALSE)
+  num_once <- unlist(count_analysis[count_analysis$count == 1, 2], use.names=FALSE)
+  prop_once <- unlist(count_analysis[count_analysis$count == 1, 3], use.names=FALSE)
+  id_summary <- data.frame(num_missing=num_missing,
+                           prop_missing=prop_missing,
+                           num_once=num_once,
+                           prop_once=prop_once)
+  return(id_summary)
+}
 ```
 
-```{r}
-joined_df <- inner_join(detainer_df, arrest_df, by="unique_identifier", na_matches="never")
-joined_df<- joined_df%>% 
-  mutate(detainer_date_diff = difftime(detainer_prepare_date, apprehension_date.y, units = "days"))
+## By Individual Dataset
+The following tables display information about the frequency of unique identifiers in each dataset. For each section, the first table displays the number of times each identifier appears in each dataset ('count') and the proportion of identifiers that it makes up ('prop'). The second table shows the number and proportion of unique identifiers that appear 'count' number of times ('num_ids' and 'prop').
 
-filtered_joined_df <- filter(joined_df, detainer_date_diff < 2 & facility_state == "WASHINGTON" & !(detention_facility %in% c("SEATAC FED.DET.CENTER", "STATE PRISON, SHELTON")))
-filtered_joined_df[c("detainer_prepare_date", "apprehension_date.y", "unique_identifier", "detention_facility")]
-```
+### Detainers
 ```{r}
-ggplot(filtered_joined_df, mapping=aes(x=detention_facility)) +
+detainer_id_summary <- summarize_id_counts(detainer_df)
+```
+
+### Encounters
+```{r}
+encounter_id_summary <- summarize_id_counts(encounter_df)
+```
+
+### Arrests
+```{r}
+arrest_id_summary <- summarize_id_counts(arrest_df)
+```
+
+### Detention
+```{r}
+detention_id_summary <- summarize_id_counts(detention_df)
+```
+
+## Summary of Datasets
+This table summarizes key information about the frequency of unique identifiers for each datasets. For each dataset, the table displays the number and proportion of missing identifiers ('num_missing' and 'prop_missing'), and the number and proportion of unique identifiers that appear once ('num_once' and 'prop_once').
+```{r}
+df_name <- c("Detainer", "Encounter", "Arrest", "Detention")
+all_id_summaries <- rbind(detainer_id_summary, encounter_id_summary, arrest_id_summary, detention_id_summary)
+all_id_summaries <- cbind(df_name, all_id_summaries)
+all_id_summaries
+```
+
+#Detainer Analysis
+## Detainer/Arrest Analysis
+```{r}
+time_filter <- 2  # date_diff.detainer_arrest threshold (in days)
+
+detainer_arrest_df_wa <- inner_join(detainer_df_wa, arrest_df,
+                                 by="unique_identifier",
+                                 na_matches='never') %>% 
+  mutate(date_diff.detainer_arrest = difftime(apprehension_date.arrest, detainer_prepare_date.detainer, units="days")) %>%
+  filter(date_diff.detainer_arrest >= 0) %>%
+  filter(!(detention_facility.detainer %in% c("SEATAC FED.DET.CENTER", "STATE PRISON, SHELTON", "US MARSHALS, YAKIMA", "US MARSHALS, SPOKANE,WA", "WASHINGTON STATE CORRECTIONS", "STAFFORD CREEK CORRECTIONS"))) %>%
+  mutate(possible_kww_violation = date_diff.detainer_arrest <= time_filter)
+```
+
+The following charts show the frequency and dates of detainers sharing unique identifiers with arrests, without filtering by time.
+```{r}
+# No time filter
+ggplot(detainer_arrest_df_wa, aes(x=detention_facility.detainer)) +
   geom_bar() +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  geom_text(stat='count', aes(label=after_stat(count)), vjust=-1) +
+  coord_cartesian(ylim = c(0, 15)) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  ggtitle("Number of Detainers Sharing Unique Identifiers with Arrests by Facility (No Time Filter)")
+
+ggplot(detainer_arrest_df_wa, aes(x=detainer_prepare_date.detainer)) +
+  geom_dotplot() +
+  theme(axis.text.x=element_text(angle=90, vjust=0.5, hjust=1),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank()) +
+  ggtitle("Date Prepared of Detainers Sharing Unique Identifiers with Arrests (No Time Filter)")
+```
+
+The following charts show the frequency and dates of ``detainers of interest,'' or detainers sharing unique identifiers with arrests and placed within `r time_filter` days of an arrest. 
+```{r}
+# With time filter
+detainers_of_interest <- detainer_arrest_df_wa %>% 
+  filter(possible_kww_violation == TRUE)
+
+ggplot(detainers_of_interest, aes(x=detention_facility.detainer)) +
+  geom_bar() +
+  geom_text(stat='count', aes(label=after_stat(count)), vjust=-1) +
+  coord_cartesian(ylim = c(0, 15)) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  ggtitle("Number of Detainers Sharing Unique Identifiers with Arrests by Facility (Time Filter)")
+
+ggplot(detainers_of_interest, aes(x=detainer_prepare_date.detainer)) +
+  geom_dotplot() +
+  theme(axis.text.x=element_text(angle=90, vjust=0.5, hjust=1),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())
+```
+
+In total, there are `r nrows(detainer_arrest_of_interest)` detainers of interest, as shown in the following table.
+```{r}
+detainers_of_interest[c("unique_identifier", "detainer_prepare_date.detainer", "apprehension_date.arrest", "date_diff.detainer_arrest", "detention_facility.detainer")]
+```
+
+The following table displays the average time between detainers and arrests with shared unique identifiers by detention facility.
+```{r}
+# Average time per facility
+date_diff_by_facility <- detainer_arrest_df_wa %>% 
+  group_by(detention_facility.detainer) %>% 
+  summarize(mean=mean(date_diff.detainer_arrest))
+date_diff_by_facility
+```
+
+## Full Dataset Analysis
+The following table displays encounter information for all detainers of interest (indicated where 'possible_kww_violation' == TRUE). The table is sorted such that all detainers of interest appear first.
+```{r}
+joined_df_wa <- left_join(detainer_arrest_df_wa, encounter_df,
+                                 by="unique_identifier",
+                                 na_matches='never')
+joined_df_wa <- left_join(joined_df_wa, detention_df,
+                       by="unique_identifier",
+                       na_matches='never') %>% 
+  group_by(unique_identifier) %>% 
+  arrange(desc(possible_kww_violation))
+
+joined_df_wa[c("unique_identifier", "event_type.encounter", "detention_facility.detainer", "apprehension_date.arrest", "possible_kww_violation")]
+
+# write.csv(joined_df_wa, file="./joined_df_wa.csv", row.names=FALSE)
 ```
