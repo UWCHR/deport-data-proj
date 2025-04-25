@@ -136,7 +136,8 @@ time_filter <- 2  # date_diff.detainer_arrest threshold (in days)
 
 detainer_arrest_df_wa <- inner_join(detainer_df_wa, arrest_df,
                                  by="unique_identifier",
-                                 na_matches='never') %>% 
+                                 na_matches='never',
+                                 relationship='many-to-many') %>% 
   mutate(date_diff.detainer_arrest = difftime(apprehension_date.arrest, detainer_prepare_date.detainer, units="days")) %>%
   filter(date_diff.detainer_arrest >= 0) %>%
   filter(!(detention_facility.detainer %in% c("SEATAC FED.DET.CENTER", "STATE PRISON, SHELTON", "US MARSHALS, YAKIMA", "US MARSHALS, SPOKANE,WA", "WASHINGTON STATE CORRECTIONS", "STAFFORD CREEK CORRECTIONS"))) %>%
@@ -151,7 +152,7 @@ ggplot(detainer_arrest_df_wa, aes(x=detention_facility.detainer)) +
   geom_text(stat='count', aes(label=after_stat(count)), vjust=-1) +
   coord_cartesian(ylim = c(0, 15)) +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
-  ggtitle("Number of Detainers Sharing Unique Identifiers with Arrests by Facility (No Time Filter)")
+  ggtitle("Number of Detainers Sharing Unique Identifiers with Arrests, by Facility (No Time Filter)")
 
 ggplot(detainer_arrest_df_wa, aes(x=detainer_prepare_date.detainer)) +
   geom_dotplot() +
@@ -178,7 +179,8 @@ ggplot(detainers_of_interest, aes(x=detainer_prepare_date.detainer)) +
   geom_dotplot() +
   theme(axis.text.x=element_text(angle=90, vjust=0.5, hjust=1),
         axis.text.y=element_blank(),
-        axis.ticks.y=element_blank())
+        axis.ticks.y=element_blank()) +
+  ggtitle("Date Prepared of Detainers Sharing Unique Identifiers with Arrests (Time Filter)")
 ```
 
 In total, there are `r nrows(detainer_arrest_of_interest)` detainers of interest, as shown in the following table.
