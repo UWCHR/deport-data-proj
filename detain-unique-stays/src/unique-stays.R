@@ -10,7 +10,7 @@ library(pacman)
 p_load(argparse, logger, tidyverse, arrow, lubridate, zoo, digest, readxl)
 
 parser <- ArgumentParser()
-parser$add_argument("--input", default = "detain-unique-stays/input/ICE Detentions_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx")
+parser$add_argument("--input", default = "detain-unique-stays/input/ICE_Detentions_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx")
 parser$add_argument("--log", default = "detain-unique-stays/output/unique-stays.R.log")
 parser$add_argument("--output", default = "detain-unique-stays/output/ice_detentions_nov23-feb25.csv.gz")
 args <- parser$parse_args()
