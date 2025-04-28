@@ -20,9 +20,9 @@ library(pacman)
 
 p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, digest)
 
-file <- "ICE Detentions_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
+file <- "ice_detentions_nov23-feb25.csv.gz"
 
-df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
+df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
   janitor::clean_names() %>% 
   mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
          book_in_date_time = ymd_hms(book_in_date_time),
@@ -43,66 +43,11 @@ sum(is.na(df$detention_facility))
 
 ```
 
-```{r gen_hash}
-
-vdigest <- Vectorize(digest)
-
-df <- df %>% rowwise() %>% 
-  unite(allCols, sep = "", remove = FALSE) %>% 
-  unite(stayCols, c(unique_identifier, stay_book_in_date_time), sep = "", remove = FALSE) %>% 
-  mutate(recid = vdigest(allCols),
-         stayid = vdigest(stayCols)) %>%
-  select(-c(allCols, stayCols))
-
-```
-
 ```{r unique_ids}
 
 length(unique(df$unique_identifier))
 
 sum(is.na(df$unique_identifier))
-
-```
-
-```{r}
-
-max_date <- as.Date("2025-02-18")
-
-df <- df %>% 
-  filter(!is.na(stay_book_in_date_time),
-         !is.na(book_in_date_time)) %>% 
-  mutate(stay_length = difftime(stay_book_out_date_time,
-            stay_book_in_date_time, unit='days'),
-         placement_length = difftime(detention_book_out_date_time,
-            book_in_date_time, unit='days'),
-         stay_length_min = difftime(replace_na(stay_book_out_date_time, max_date),
-            stay_book_in_date_time, unit='days'),
-         placement_length_min = difftime(replace_na(detention_book_out_date_time, max_date),
-            book_in_date_time, unit='days'))
-
-df <- df %>% 
-  filter(!is.na(unique_identifier)) %>% 
-  group_by(unique_identifier) %>% 
-  arrange(stay_book_in_date_time, book_in_date_time) %>%
-  mutate(total_stays = n_distinct(stay_book_in_date_time),
-         total_placements = n(),
-         current_stay = is.na(stay_book_out_date_time),
-         current_placement = is.na(detention_book_out_date_time),
-         stay_count = data.table::rleid(stay_book_in_date_time)) %>% 
-  ungroup()
-
-df <- df %>% 
-  group_by(stayid) %>% 
-  arrange(stay_book_in_date_time, book_in_date_time) %>%
-  mutate(placement_count = data.table::rleid(recid),
-         stay_placements = n(),
-         first_facil = detention_facility_code[[1]], 
-         last_facil = detention_facility_code[[length(detention_facility_code)]],
-         longest_placement_facil = detention_facility_code[which.max(placement_length_min)],
-         last_placement = placement_count == stay_placements,
-         longest_placement = placement_length_min == max(placement_length_min)
-         ) %>% 
-  ungroup()
 
 ```
 
@@ -244,7 +189,7 @@ p2
 
 ```{r get_wa_arrests}
 
-file <- "ERO Admin Arrests_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
+file <- "ERO_Admin_Arrests_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
 
 arr <- read_excel(here('analyze', 'input', file), skip=6) %>% 
   janitor::clean_names() %>% 
