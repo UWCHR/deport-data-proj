@@ -77,29 +77,29 @@ df <- df %>%
 
 df <- df %>% 
   mutate(detention_facility_region = case_when(detention_facility_aor == "ATL" ~ "Interior/Northern",
-detention_facility_aor == "BAL" ~ "Interior/Northern",
-detention_facility_aor == "BOS" ~ "Interior/Northern",
-detention_facility_aor == "BUF" ~ "Interior/Northern",
-detention_facility_aor == "CHI" ~ "Interior/Northern",
-detention_facility_aor == "DAL" ~ "Interior/Northern",
-detention_facility_aor == "DEN" ~ "Interior/Northern",
-detention_facility_aor == "DET" ~ "Interior/Northern",
-detention_facility_aor == "ELP" ~ "Southern",
-detention_facility_aor == "HOU" ~ "Southern",
-detention_facility_aor == "LOS" ~ "Interior/Northern",
-detention_facility_aor == "MIA" ~ "Interior/Northern",
-detention_facility_aor == "NEW" ~ "Interior/Northern",
-detention_facility_aor == "NOL" ~ "Interior/Northern",
-detention_facility_aor == "NYC" ~ "Interior/Northern",
-detention_facility_aor == "PHI" ~ "Interior/Northern",
-detention_facility_aor == "PHO" ~ "Southern",
-detention_facility_aor == "SEA" ~ "Interior/Northern",
-detention_facility_aor == "SFR" ~ "Interior/Northern",
-detention_facility_aor == "SLC" ~ "Interior/Northern",
-detention_facility_aor == "SNA" ~ "Southern",
-detention_facility_aor == "SND" ~ "Southern",
-detention_facility_aor == "SPM" ~ "Interior/Northern",
-detention_facility_aor == "WAS" ~ "Interior/Northern"))
+          detention_facility_aor == "BAL" ~ "Interior/Northern",
+          detention_facility_aor == "BOS" ~ "Interior/Northern",
+          detention_facility_aor == "BUF" ~ "Interior/Northern",
+          detention_facility_aor == "CHI" ~ "Interior/Northern",
+          detention_facility_aor == "DAL" ~ "Interior/Northern",
+          detention_facility_aor == "DEN" ~ "Interior/Northern",
+          detention_facility_aor == "DET" ~ "Interior/Northern",
+          detention_facility_aor == "ELP" ~ "Southern",
+          detention_facility_aor == "HOU" ~ "Southern",
+          detention_facility_aor == "LOS" ~ "Interior/Northern",
+          detention_facility_aor == "MIA" ~ "Interior/Northern",
+          detention_facility_aor == "NEW" ~ "Interior/Northern",
+          detention_facility_aor == "NOL" ~ "Interior/Northern",
+          detention_facility_aor == "NYC" ~ "Interior/Northern",
+          detention_facility_aor == "PHI" ~ "Interior/Northern",
+          detention_facility_aor == "PHO" ~ "Southern",
+          detention_facility_aor == "SEA" ~ "Interior/Northern",
+          detention_facility_aor == "SFR" ~ "Interior/Northern",
+          detention_facility_aor == "SLC" ~ "Interior/Northern",
+          detention_facility_aor == "SNA" ~ "Southern",
+          detention_facility_aor == "SND" ~ "Southern",
+          detention_facility_aor == "SPM" ~ "Interior/Northern",
+          detention_facility_aor == "WAS" ~ "Interior/Northern"))
 
 ```
 
@@ -186,13 +186,151 @@ p2
 
 ```
 
+```{r pre_post_trump_change}
+
+dat <- df %>% 
+  filter(placement_count == 1,
+         stay_book_in_date_time >= "2024-01-01"
+         ) %>% 
+  mutate(week = floor_date(book_in_date_time, "week", week_start = "Monday"),
+         trump = book_in_date_time >= "2025-01-20") %>% 
+  group_by(trump, week, detention_facility_aor) %>% 
+  count() %>% 
+  group_by(trump, detention_facility_aor) %>% 
+  summarize(weekly_mean_bookins = mean(n))
+
+p1 <- dat %>% 
+  ggplot(aes(x = detention_facility_aor, y = weekly_mean_bookins, fill = trump)) +
+  geom_col(position='dodge')
+
+p1
+
+dat2 <- dat %>% 
+  pivot_wider(id_cols='detention_facility_aor', names_from = "trump", names_prefix="trump_", values_from= 'weekly_mean_bookins') %>% 
+  mutate(pct_change = ((trump_TRUE - trump_FALSE) / trump_FALSE) * 100) %>% 
+  arrange(desc(pct_change))
+
+p2 <- dat2 %>% 
+  mutate(detention_facility_aor = fct_reorder(detention_facility_aor, pct_change),
+         pos = pct_change > 0) %>% 
+  ggplot(aes(x = pct_change, y = detention_facility_aor, fill = pos)) +
+  geom_col(show.legend = FALSE) +
+  labs(title = "% change in weekly avg. detention bookins in first weeks of Trump II")
+
+p2
+
+```
+
+```{r pre_post_trump_change_transfers}
+
+# Is it correct to interpret all detention placements beyond first as "transfers"
+
+dat <- df %>% 
+  filter(placement_count > 1,
+         stay_book_in_date_time >= "2024-01-01"
+         ) %>% 
+  mutate(week = floor_date(book_in_date_time, "week", week_start = "Monday"),
+         trump = book_in_date_time >= "2025-01-20") %>% 
+  group_by(trump, week, detention_facility_aor) %>% 
+  count() %>% 
+  group_by(trump, detention_facility_aor) %>% 
+  summarize(weekly_mean_bookins = mean(n))
+
+p1 <- dat %>% 
+  ggplot(aes(x = detention_facility_aor, y = weekly_mean_bookins, fill = trump)) +
+  geom_col(position='dodge')
+
+p1
+
+dat2 <- dat %>% 
+  pivot_wider(id_cols='detention_facility_aor', names_from = "trump", names_prefix="trump_", values_from= 'weekly_mean_bookins') %>% 
+  mutate(pct_change = ((trump_TRUE - trump_FALSE) / trump_FALSE) * 100) %>% 
+  arrange(desc(pct_change))
+
+p2 <- dat2 %>% 
+  mutate(detention_facility_aor = fct_reorder(detention_facility_aor, pct_change),
+         pos = pct_change > 0) %>% 
+  ggplot(aes(x = pct_change, y = detention_facility_aor, fill = pos)) +
+  geom_col(show.legend = FALSE) +
+  labs(title = "% change in weekly avg. detention transfers in first weeks of Trump II")
+
+p2
+
+```
+
+```{r pre_post_trump_change_facil_bookins}
+
+dat <- df %>% 
+  filter(placement_count == 1,
+         stay_book_in_date_time >= "2024-01-01"
+         ) %>% 
+  mutate(week = floor_date(book_in_date_time, "week", week_start = "Monday"),
+         trump = book_in_date_time >= "2025-01-20") %>% 
+  group_by(trump, week, detention_facility) %>% 
+  count() %>% 
+  group_by(trump, detention_facility) %>% 
+  summarize(weekly_mean_bookins = mean(n))
+
+# p1 <- dat %>% 
+#   ggplot(aes(x = detention_facility_aor, y = weekly_mean_bookins, fill = trump)) +
+#   geom_col(position='dodge')
+# 
+# p1
+
+dat2 <- dat %>% 
+  pivot_wider(id_cols='detention_facility', names_from = "trump", names_prefix="trump_", values_from= 'weekly_mean_bookins') %>% 
+  mutate(pct_change = ((trump_TRUE - trump_FALSE) / trump_FALSE) * 100) %>% 
+  arrange(desc(pct_change))
+
+dat2 %>% 
+  head(10)
+
+dat2 %>% 
+  filter(!is.na(pct_change)) %>% 
+  tail(10)
+
+```
+
+```{r pre_post_trump_change_facil_transfers}
+
+dat <- df %>% 
+  filter(placement_count > 1,
+         stay_book_in_date_time >= "2024-01-01"
+         ) %>% 
+  mutate(week = floor_date(book_in_date_time, "week", week_start = "Monday"),
+         trump = book_in_date_time >= "2025-01-20") %>% 
+  group_by(trump, week, detention_facility) %>% 
+  count() %>% 
+  group_by(trump, detention_facility) %>% 
+  summarize(weekly_mean_bookins = mean(n))
+
+# p1 <- dat %>% 
+#   ggplot(aes(x = detention_facility_aor, y = weekly_mean_bookins, fill = trump)) +
+#   geom_col(position='dodge')
+# 
+# p1
+
+dat2 <- dat %>% 
+  pivot_wider(id_cols='detention_facility', names_from = "trump", names_prefix="trump_", values_from= 'weekly_mean_bookins') %>% 
+  mutate(pct_change = ((trump_TRUE - trump_FALSE) / trump_FALSE) * 100) %>% 
+  arrange(desc(pct_change))
+
+dat2 %>% 
+  head(10)
+
+dat2 %>% 
+  filter(!is.na(pct_change)) %>% 
+  tail(10)
+
+```
+
 
 ```{r get_wa_arrests}
 
 file <- "ERO_Admin_Arrests_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
 
-arr <- read_excel(here('analyze', 'input', file), skip=6) %>% 
-  janitor::clean_names() %>% 
+arr <- read_excel(here('analyze', 'input', file), skip=6) %>%
+  janitor::clean_names() %>%
   mutate(apprehension_date = as.Date(apprehension_date)) |>
   mutate(apprehension_method = fct(apprehension_method)) |>
   mutate(criminality = apprehension_criminality == "1 Convicted Criminal") |>
@@ -200,29 +338,31 @@ arr <- read_excel(here('analyze', 'input', file), skip=6) %>%
   filter(is.na(unique_identifier) | n_dupe == 1) |>
   mutate(week = floor_date(apprehension_date, "week", week_start = "Monday"))
 
-to_join <- arr %>% 
+to_join <- arr %>%
   dplyr::select(unique_identifier, citizenship_country, final_program_group)
 
 to_join <- to_join[!duplicated(to_join$unique_identifier), ]
 
 df <- df %>% left_join(to_join, by='unique_identifier')
 
-wa_arr <- arr %>% 
+rm(to_join)
+
+wa_arr <- arr %>%
   filter(apprehension_state == "WASHINGTON")
 
 ```
 
 ```{r wa_detentions}
 
-wa_det <- df %>% 
+wa_det <- df %>%
   filter(unique_identifier %in% unlist(wa_arr$unique_identifier))
 
-wa_det %>% 
-  count(detention_facility) %>% 
+wa_det %>%
+  count(detention_facility) %>%
   arrange(desc(n))
 
-wa_det %>% 
-  count(first_facil) %>% 
+wa_det %>%
+  count(first_facil) %>%
   arrange(desc(n))
 
 ```
@@ -265,10 +405,11 @@ headcounter <- function(date, df, group_vars) {
 
 # Generate limited sample dataset
 temp_df <- df %>% 
-  filter(detention_facility_code == "CSCNWWA")
+  filter(detention_facility_code == "CSCNWWA") %>% 
+  mutate(first_placement = placement_count == 1)
 
 # Apply function to timeline
-example_headcount <- lapply(timeline, headcounter, df=temp_df, group_vars=c('gender'))
+example_headcount <- lapply(timeline, headcounter, df=temp_df, group_vars=c('first_placement'))
 
 # Transform output into data frame
 example_headcount_data <- map_dfr(example_headcount, bind_rows)
@@ -276,9 +417,9 @@ example_headcount_data <- map_dfr(example_headcount, bind_rows)
 # Plot headcount
 p1 <- example_headcount_data %>% 
   filter(date >= "2023-11-15") %>% 
-  ggplot(aes(x = date, y = n, color = gender), group = gender ) +
+  ggplot(aes(x = date, y = n, color = first_placement), group = first_placement ) +
   geom_line() +
-  labs(title = "Daily detained population by `gender`",
+  labs(title = "Daily detained population by `first_placement`",
        subtitle = "Northwest ICE Processing Center")
 
 p1
