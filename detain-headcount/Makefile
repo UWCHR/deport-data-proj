@@ -18,7 +18,7 @@ clean:
 output/headcount_detloc_nov23-feb25.csv.gz: \
 	src/headcount.R \
 	input/ice_detentions_nov23-feb25.csv.gz
-	mkdir -p output
+	mkdir -p input output
 	Rscript $< \
 		--input=input/ice_detentions_nov23-feb25.csv.gz \
 		--group='detention_facility_code' \
