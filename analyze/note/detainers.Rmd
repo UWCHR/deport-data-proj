@@ -68,6 +68,7 @@ det <- det %>%
 
 tab1 <- det %>% 
   filter(facility_state == "WASHINGTON") %>% 
+  filter(!str_detect(detention_facility, "SHELTON|SEATAC|MARSHALS|STAFFORD|STATE|NW ICE")) %>% 
   group_by(detention_facility) %>% 
   summarize(n = n(),
             id_in_arrests = sum(id_in_arrests))

@@ -75,6 +75,21 @@ to_join <- known_facil %>%
 df <- df %>% 
   left_join(to_join, by="detention_facility_code")
 
+detloc_aor <- known_facil %>% 
+  rename(detention_facility_code = detloc,
+         area_of_responsibility = aor) %>% 
+  distinct(detention_facility_code, area_of_responsibility) %>% 
+  arrange(detention_facility_code, area_of_responsibility)
+
+detloc_aor_list <- as.list(detloc_aor$detention_facility_code)
+
+names(detloc_aor_list) <- detloc_aor$area_of_responsibility
+
+df$first_aor <- names(detloc_aor_list)[match(df$first_facil, detloc_aor_list)]
+df$last_aor <- names(detloc_aor_list)[match(df$last_facil, detloc_aor_list)]
+df$prev_aor <- names(detloc_aor_list)[match(df$prev_facil, detloc_aor_list)]
+df$longest_aor <- names(detloc_aor_list)[match(df$longest_placement_facil, detloc_aor_list)]
+
 df <- df %>% 
   mutate(detention_facility_region = case_when(detention_facility_aor == "ATL" ~ "Interior/Northern",
           detention_facility_aor == "BAL" ~ "Interior/Northern",
@@ -401,39 +416,14 @@ headcounter <- function(date, df, group_vars) {
 
 ```
 
-```{r facil_headcount_gender}
-
-# Generate limited sample dataset
-temp_df <- df %>% 
-  filter(detention_facility_code == "CSCNWWA") %>% 
-  mutate(first_placement = placement_count == 1)
-
-# Apply function to timeline
-example_headcount <- lapply(timeline, headcounter, df=temp_df, group_vars=c('first_placement'))
-
-# Transform output into data frame
-example_headcount_data <- map_dfr(example_headcount, bind_rows)
-
-# Plot headcount
-p1 <- example_headcount_data %>% 
-  filter(date >= "2023-11-15") %>% 
-  ggplot(aes(x = date, y = n, color = first_placement), group = first_placement ) +
-  geom_line() +
-  labs(title = "Daily detained population by `first_placement`",
-       subtitle = "Northwest ICE Processing Center")
-
-p1
-
-```
-
-```{r facil_headcount_final_prog}
+```{r facil_headcount}
 
 # Generate limited sample dataset
 temp_df <- df %>% 
   filter(detention_facility_code == "CSCNWWA")
 
 # Apply function to timeline
-example_headcount <- lapply(timeline, headcounter, df=temp_df, group_vars=c('final_program_group'))
+example_headcount <- lapply(timeline, headcounter, df=temp_df, group_vars=c('first_aor'))
 
 # Transform output into data frame
 example_headcount_data <- map_dfr(example_headcount, bind_rows)
@@ -441,14 +431,41 @@ example_headcount_data <- map_dfr(example_headcount, bind_rows)
 # Plot headcount
 p1 <- example_headcount_data %>% 
   filter(date >= "2023-11-15") %>% 
-  ggplot(aes(x = date, y = n, fill = final_program_group), group = final_program_group ) +
-  geom_area() +
-  labs(title = "Daily detained population by `final_program_group`",
+  ggplot(aes(x = date, y = n, color = first_aor), group = first_aor ) +
+  geom_line() +
+  labs(title = "Daily detained population by `first_aor`",
        subtitle = "Northwest ICE Processing Center")
 
-p1
+plotly::ggplotly(p1)
 
 ```
+
+
+```{r facil_headcount}
+
+# Generate limited sample dataset
+temp_df <- df %>% 
+  filter(detention_facility_code == "CSCNWWA",
+         placement_count > 1)
+
+# Apply function to timeline
+example_headcount <- lapply(timeline, headcounter, df=temp_df, group_vars=c('prev_aor'))
+
+# Transform output into data frame
+example_headcount_data <- map_dfr(example_headcount, bind_rows)
+
+# Plot headcount
+p1 <- example_headcount_data %>% 
+  filter(date >= "2023-11-15") %>% 
+  ggplot(aes(x = date, y = n, color = prev_aor), group = prev_aor ) +
+  geom_line() +
+  labs(title = "Daily detained population by `prev_aor`",
+       subtitle = "Northwest ICE Processing Center")
+
+plotly::ggplotly( p1)
+
+```
+
 
 ```{r facil_headcount_citizenship}
 
