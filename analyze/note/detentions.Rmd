@@ -387,7 +387,7 @@ wa_det %>%
 ```{r headcounter_setup, message=FALSE, warning=FALSE, include=TRUE}
 
 # Transform data to "fill in" missing `detention_book_out_date_time` values
-# in order to account for ongong detention stays at time of release of data
+# in order to account for ongoing detention stays at time of release of data
 max_date <- max(df$stay_book_out_date_time, na.rm=TRUE)
 
 df <- df %>%
@@ -423,7 +423,7 @@ temp_df <- df %>%
   filter(detention_facility_code == "CSCNWWA")
 
 # Apply function to timeline
-example_headcount <- lapply(timeline, headcounter, df=temp_df, group_vars=c('first_aor'))
+example_headcount <- lapply(timeline, headcounter, df=temp_df, group_vars=c('gender'))
 
 # Transform output into data frame
 example_headcount_data <- map_dfr(example_headcount, bind_rows)
@@ -431,9 +431,9 @@ example_headcount_data <- map_dfr(example_headcount, bind_rows)
 # Plot headcount
 p1 <- example_headcount_data %>% 
   filter(date >= "2023-11-15") %>% 
-  ggplot(aes(x = date, y = n, color = first_aor), group = first_aor ) +
-  geom_line() +
-  labs(title = "Daily detained population by `first_aor`",
+  ggplot(aes(x = date, y = n, color = gender), group = gender ) +
+  geom_line(position='stack') +
+  labs(title = "Daily detained population by `gender`",
        subtitle = "Northwest ICE Processing Center")
 
 plotly::ggplotly(p1)

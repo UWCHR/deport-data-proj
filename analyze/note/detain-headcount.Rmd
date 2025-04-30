@@ -1,0 +1,169 @@
+---
+title: "ICE ERO-LESA detention data Nov. 2023-Feb. 2025"
+author: "UWCHR"
+date: "2025-03-25"
+output:
+    html_document:
+        html_preview: true
+        toc: true
+        toc_depth: 3
+        toc_float: true
+        code_folding: hide
+---
+
+
+```{r setup, message=FALSE, warning=FALSE, include=TRUE}
+
+options(scipen = 1000000)
+
+library(pacman)
+
+p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, digest)
+
+file <- "headcount_detloc_nov23-feb25.csv.gz"
+
+df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
+  mutate(date = as.Date(date))
+
+```
+
+```{r known_facilities}
+
+known_facil <- read_delim(here::here('analyze', 'input', 'facilities.csv.gz'), delim ='|')
+
+df <- df %>% 
+  mutate(known_facil = detention_facility_code %in% unique(known_facil$detloc),
+         trump = date >= "2025-01-20")
+
+to_join <- known_facil %>% 
+  dplyr::select(detloc, aor, state) %>% 
+  rename(detention_facility_code = detloc,
+         detention_facility_aor = aor,
+         detention_facility_state = state)
+
+df <- df %>% 
+  left_join(to_join, by="detention_facility_code")
+
+df <- df %>% 
+  mutate(detention_facility_region = case_when(detention_facility_aor == "ATL" ~ "Interior/Northern",
+          detention_facility_aor == "BAL" ~ "Interior/Northern",
+          detention_facility_aor == "BOS" ~ "Interior/Northern",
+          detention_facility_aor == "BUF" ~ "Interior/Northern",
+          detention_facility_aor == "CHI" ~ "Interior/Northern",
+          detention_facility_aor == "DAL" ~ "Interior/Northern",
+          detention_facility_aor == "DEN" ~ "Interior/Northern",
+          detention_facility_aor == "DET" ~ "Interior/Northern",
+          detention_facility_aor == "ELP" ~ "Southern",
+          detention_facility_aor == "HOU" ~ "Southern",
+          detention_facility_aor == "LOS" ~ "Interior/Northern",
+          detention_facility_aor == "MIA" ~ "Interior/Northern",
+          detention_facility_aor == "NEW" ~ "Interior/Northern",
+          detention_facility_aor == "NOL" ~ "Interior/Northern",
+          detention_facility_aor == "NYC" ~ "Interior/Northern",
+          detention_facility_aor == "PHI" ~ "Interior/Northern",
+          detention_facility_aor == "PHO" ~ "Southern",
+          detention_facility_aor == "SEA" ~ "Interior/Northern",
+          detention_facility_aor == "SFR" ~ "Interior/Northern",
+          detention_facility_aor == "SLC" ~ "Interior/Northern",
+          detention_facility_aor == "SNA" ~ "Southern",
+          detention_facility_aor == "SND" ~ "Southern",
+          detention_facility_aor == "SPM" ~ "Interior/Northern",
+          detention_facility_aor == "WAS" ~ "Interior/Northern"))
+
+```
+
+```{r}
+
+p1 <- df %>% 
+  filter(date > "2024-01-01") %>% 
+  group_by(date) %>% 
+  summarize(n = sum(n)) %>% 
+  ggplot(aes(x = date, y = n)) +
+  geom_line() +
+  geom_vline(xintercept=as.Date("2025-01-20"), linetype="dashed") +
+  ylim(0,NA)
+
+p1
+
+```
+
+```{r}
+
+p1 <- df %>% 
+  filter(date > "2024-01-01") %>% 
+  group_by(date, known_facil) %>% 
+  summarize(n = sum(n)) %>% 
+  ggplot(aes(x = date, y = n, color = known_facil)) +
+  geom_line()
+
+p1
+
+```
+
+```{r}
+
+p1 <- df %>% 
+  filter(date > "2024-01-01") %>% 
+  group_by(date, detention_facility_aor) %>% 
+  summarize(n = sum(n)) %>% 
+  ggplot(aes(x = date, y = n, color = detention_facility_aor)) +
+  geom_line()
+
+plotly::ggplotly(p1)
+
+```
+
+```{r}
+
+dat <- df %>% 
+  filter(date > "2024-11-01") %>% 
+  group_by(date, trump, detention_facility_aor) %>% 
+  summarize(n = sum(n)) %>% 
+  group_by(trump, detention_facility_aor) %>% 
+  summarize(adp = mean(n))
+
+dat2 <- dat %>% 
+  pivot_wider(id_cols='detention_facility_aor', names_from = "trump", names_prefix="trump_", values_from= 'adp') %>% 
+  mutate(diff = trump_TRUE - trump_FALSE,
+          pct_change = ((diff) / trump_FALSE) * 100,
+         ) %>% 
+  arrange(desc(pct_change))
+
+p1 <- dat %>% 
+  ggplot(aes(y = detention_facility_aor, x = adp, fill = trump)) +
+  geom_col(position = "dodge")
+
+p1
+
+p2 <- dat2 %>% 
+  mutate(detention_facility_aor = fct_reorder(detention_facility_aor, diff),
+         pos = diff > 0) %>% 
+  ggplot(aes(x = diff, y = detention_facility_aor, fill = pos)) +
+  geom_col(show.legend = FALSE) +
+  labs(title = "Change ADP, last 2 months of Biden versus first weeks of Trump II")
+
+p2
+
+p2.1 <- dat2 %>% 
+  mutate(detention_facility_aor = fct_reorder(detention_facility_aor, pct_change),
+         pos = pct_change > 0) %>% 
+  ggplot(aes(x = pct_change, y = detention_facility_aor, fill = pos)) +
+  geom_col(show.legend = FALSE) +
+  labs(title = "% change ADP, last 2 months of Biden versus first weeks of Trump II")
+
+p2.1
+
+```
+
+```{r}
+
+p1 <- df %>% 
+  filter(date > "2024-01-01") %>% 
+  group_by(date, detention_facility_state) %>% 
+  summarize(n = sum(n)) %>% 
+  ggplot(aes(x = date, y = n, color = detention_facility_state)) +
+  geom_line()
+
+p1
+
+```
