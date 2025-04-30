@@ -74,6 +74,7 @@ df <- df %>%
          stay_placements = n(),
          first_facil = detention_facility_code[[1]], 
          last_facil = detention_facility_code[[length(detention_facility_code)]],
+         prev_facil = lag(detention_facility_code, n=1),
          longest_placement_facil = detention_facility_code[which.max(placement_length_min)],
          last_placement = placement_count == stay_placements,
          longest_placement = placement_length_min == max(placement_length_min)
