@@ -67,10 +67,13 @@ unknown_facil <- unique(df[df$known_facil == FALSE, c("detention_facility_code",
   arrange(detention_facility)
 
 to_join <- known_facil %>% 
-  dplyr::select(detloc, aor, state) %>% 
+  dplyr::select(detloc, aor, state, circuit, over_72, type) %>% 
   rename(detention_facility_code = detloc,
          detention_facility_aor = aor,
-         detention_facility_state = state)
+         detention_facility_state = state,
+         detention_facility_circuit = circuit,
+         detention_facility_over_72 = over_72,
+         detention_facility_type = type)
 
 df <- df %>% 
   left_join(to_join, by="detention_facility_code")
@@ -230,7 +233,7 @@ p2 <- dat2 %>%
          pos = pct_change > 0) %>% 
   ggplot(aes(x = pct_change, y = detention_facility_aor, fill = pos)) +
   geom_col(show.legend = FALSE) +
-  labs(title = "% change in weekly avg. detention bookins in first weeks of Trump II")
+  labs(title = "% change in weekly avg. initial bookins in first weeks of Trump II")
 
 p2
 
@@ -336,6 +339,41 @@ dat2 %>%
 dat2 %>% 
   filter(!is.na(pct_change)) %>% 
   tail(10)
+
+```
+
+
+```{r pre_post_trump_change_circuit}
+
+dat <- df %>% 
+  filter(stay_book_in_date_time >= "2024-01-01"
+         ) %>% 
+  mutate(week = floor_date(book_in_date_time, "week", week_start = "Monday"),
+         trump = book_in_date_time >= "2025-01-20") %>% 
+  group_by(trump, week, detention_facility_circuit) %>% 
+  count() %>% 
+  group_by(trump, detention_facility_circuit) %>% 
+  summarize(weekly_mean_bookins = mean(n))
+
+p1 <- dat %>% 
+  ggplot(aes(x = detention_facility_circuit, y = weekly_mean_bookins, fill = trump)) +
+  geom_col(position='dodge')
+
+p1
+
+dat2 <- dat %>% 
+  pivot_wider(id_cols='detention_facility_circuit', names_from = "trump", names_prefix="trump_", values_from= 'weekly_mean_bookins') %>% 
+  mutate(pct_change = ((trump_TRUE - trump_FALSE) / trump_FALSE) * 100) %>% 
+  arrange(desc(pct_change))
+
+p2 <- dat2 %>% 
+  mutate(detention_facility_circuit = fct_reorder(as.character(detention_facility_circuit), pct_change),
+         pos = pct_change > 0) %>% 
+  ggplot(aes(x = pct_change, y = detention_facility_circuit, fill = pos)) +
+  geom_col(show.legend = FALSE) +
+  labs(title = "% change in weekly avg. detention bookins in first weeks of Trump II")
+
+p2
 
 ```
 
