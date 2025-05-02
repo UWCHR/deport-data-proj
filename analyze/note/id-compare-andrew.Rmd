@@ -20,18 +20,22 @@ library(pacman)
 p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, ggVennDiagram)
 ```
 
+```{r setup_facilities}
+file <- "facilities.xlsx"
+
+facilities_df <- read_excel(here('analyze', 'input', file)) %>% 
+  janitor::clean_names()
+```
+
 ```{r setup_detainers}
 file <- "ERO Detainers_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
 
 detainer_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
-  janitor::clean_names()
-
-detainer_df <- detainer_df%>% 
+  janitor::clean_names() %>% 
   mutate(date_diff = difftime(detainer_prepare_date, apprehension_date, units='days')) %>% 
   rename_with(~ paste(., "detainer", sep="."), .cols=-unique_identifier)
 
-detainer_df_wa <- detainer_df %>% 
-  filter(facility_state.detainer == "WASHINGTON")
+detainer_ids <- unique(detainer_df$unique_identifier)
 ```
 
 ```{r setup_encounters}
@@ -41,6 +45,8 @@ encounter_df <- read_excel(here('analyze', 'input', file), skip=6) %>%
   janitor::clean_names() %>% 
   mutate(event_date = as.Date(event_date)) %>% 
   rename_with(~ paste(., "encounter", sep="."), .cols=-unique_identifier)
+
+encounter_ids <- unique(encounter_df$unique_identifier)
 ```
 
 ```{r setup_arrests}
@@ -52,8 +58,10 @@ arrest_df<- read_excel(here('analyze', 'input', file), skip=6) %>%
   mutate(apprehension_method = fct(apprehension_method)) |>
   mutate(criminality = apprehension_criminality == "1 Convicted Criminal") |>
   mutate(n_dupe = row_number(), .by = c("apprehension_date", "apprehension_method", "apprehension_criminality", "unique_identifier")) |>
-  filter(is.na(unique_identifier) | n_dupe == 1) %>% 
+  filter(is.na(unique_identifier) | n_dupe == 1) %>%
   rename_with(~ paste(., "arrest", sep="."), .cols=-unique_identifier)
+
+arrest_ids <- unique(arrest_df$unique_identifier)
 ```
 
 ```{r setup_detention}
@@ -67,8 +75,12 @@ detention_df <- read_excel(here('analyze', 'input', file), skip=6) %>%
          stay_book_in_date_time = as.Date(stay_book_out_date, format = "%m/%d/%Y %H:%M"),
          book_in_fy = substr(quarter(book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4),
          stay_book_in_fy = substr(quarter(stay_book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4)) %>% 
+  left_join(facilities_df, by=c("detention_facility_code" = "detloc")) %>% 
   rename_with(~ paste(., "detention", sep="."), .cols=-unique_identifier)
+
+detention_ids <- unique(detention_df$unique_identifier)
 ```
+
 
 # Unique Identifier Analysis
 ```{r}
@@ -134,6 +146,9 @@ all_id_summaries
 ```{r}
 time_filter <- 2  # date_diff.detainer_arrest threshold (in days)
 
+detainer_df_wa <- detainer_df %>% 
+  filter(facility_state.detainer == "WASHINGTON")
+
 detainer_arrest_df_wa <- inner_join(detainer_df_wa, arrest_df,
                                  by="unique_identifier",
                                  na_matches='never',
@@ -197,19 +212,72 @@ date_diff_by_facility <- detainer_arrest_df_wa %>%
 date_diff_by_facility
 ```
 
-## Full Dataset Analysis
-The following table displays encounter information for all detainers of interest (indicated where 'possible_kww_violation' == TRUE). The table is sorted such that all detainers of interest appear first.
+## Enforcement Pathways
+This section attempts to analyze various "enforcement pathways" in the Pacific Northwest by joining data across encounter, arrest, and detention datasets. The following subsections analyze enforcement pathways for detentions in Washington, arrests in Seattle AOR, and encounters in Seattle AOR.
+
 ```{r}
-joined_df_wa <- left_join(detainer_arrest_df_wa, encounter_df,
-                                 by="unique_identifier",
-                                 na_matches='never')
-joined_df_wa <- left_join(joined_df_wa, detention_df,
-                       by="unique_identifier",
-                       na_matches='never') %>% 
-  group_by(unique_identifier) %>% 
-  arrange(desc(possible_kww_violation))
+detention_df_wa_uq <- detention_df %>% 
+  filter(state.detention == "WA") %>% 
+  arrange(desc(stay_book_in_date_time.detention)) %>% 
+  distinct(unique_identifier, .keep_all=TRUE)
 
-joined_df_wa[c("unique_identifier", "event_type.encounter", "detention_facility.detainer", "apprehension_date.arrest", "possible_kww_violation")]
+detention_df_uq <- detention_df %>% 
+  arrange(desc(stay_book_in_date_time.detention)) %>% 
+  distinct(unique_identifier, .keep_all=TRUE)
 
-# write.csv(joined_df_wa, file="./joined_df_wa.csv", row.names=FALSE)
+encounter_df_wa_uq <- encounter_df %>% 
+  filter(responsible_aor.encounter == "Seattle Area of Responsibility") %>% 
+  arrange(desc(event_date.encounter)) %>% 
+  distinct(unique_identifier, .keep_all=TRUE)
+
+encounter_df_uq <- encounter_df %>% 
+  arrange(desc(event_date.encounter)) %>% 
+  distinct(unique_identifier, .keep_all=TRUE)
+
+arrest_df_wa_uq <- arrest_df %>% 
+  filter(apprehension_aor.arrest == "Seattle Area of Responsibility") %>% 
+  arrange(desc(apprehension_date.arrest)) %>% 
+  distinct(unique_identifier, .keep_all=TRUE)
+
+arrest_df_uq <- arrest_df %>% 
+  arrange(desc(apprehension_date.arrest)) %>% 
+  distinct(unique_identifier, .keep_all=TRUE)
+
+```
+
+```{r}
+summarize_pathways <- function(df1, df2, df3) {
+  joined_df <- df1 %>% 
+    left_join(df2,
+            by="unique_identifier",
+            na_matches='never') %>% 
+    left_join(df3,
+              by="unique_identifier",
+              na_matches='never')
+  
+  joined_df_count_geo <- joined_df %>% 
+    count(responsible_site.encounter, detention_facility_code.detention, name="count", sort=TRUE)
+  print(joined_df_count_geo)
+  
+  joined_df_count_method <- joined_df %>% 
+    count(event_type.encounter, apprehension_method.arrest, name="count", sort=TRUE)
+  print(joined_df_count_method)
+  
+  print(nrow(joined_df))
+}
+```
+
+## Detention
+```{r}
+summarize_pathways(detention_df_wa_uq, encounter_df_uq, arrest_df_uq)
+```
+
+## Arrest
+```{r}
+summarize_pathways(arrest_df_wa_uq, encounter_df_uq, detention_df_uq)
+```
+
+## Encounter
+```{r}
+summarize_pathways(encounter_df_wa_uq, arrest_df_uq, detention_df_uq)
 ```
