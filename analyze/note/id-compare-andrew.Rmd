@@ -217,6 +217,8 @@ This section attempts to analyze various "enforcement pathways" in the Pacific N
 
 ```{r}
 
+# PN suggestion: start new notebook from this section
+
 # PN comment: Selecting distinct detention IDs will only represent a given detained person's first (or last, depending on sorting) detention record, is this what we want? (Same if multuple arrests/encounters/detainers but less of an issue because fewer repeat IDs)
 
 detention_df_wa_uq <- detention_df %>% 
@@ -284,3 +286,9 @@ summarize_pathways(arrest_df_wa_uq, encounter_df_uq, detention_df_uq)
 ```{r}
 summarize_pathways(encounter_df_wa_uq, arrest_df_uq, detention_df_uq)
 ```
+
+#PN thoughts on next steps:
+
+- Look at difference in these enforcement pathways post-Trump inauguration, compared to earlier period of dataset and/or last three months of Biden admin. Changes in rank or relationship between encounter-arrest-detention locations, methods?
+- Look at full detention pathways, not just initial book-in (double check what is happening when you select a single record per unique ID in detentions data). Changes post-Trump? Separate analysis for detentions not in arrests dataset, or not in WA. (Detentions with no associated arrest either represent transfers from CBP or, less likely, arrests pre-dating release of dataset.)
+- Any other changes pre-post Trump? Rate of missingness of IDs or other data, for example?
