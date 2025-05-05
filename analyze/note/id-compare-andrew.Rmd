@@ -20,15 +20,15 @@ library(pacman)
 p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, ggVennDiagram)
 ```
 
-```{r setup_facilities}
-file <- "facilities.xlsx"
+```{r setup_facilities, message=FALSE, warning=FALSE, include=TRUE}
+file <- "facilities.csv.gz"
 
-facilities_df <- read_excel(here('analyze', 'input', file)) %>% 
+facilities_df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
   janitor::clean_names()
 ```
 
-```{r setup_detainers}
-file <- "ERO Detainers_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
+```{r setup_detainers, message=FALSE, warning=FALSE, include=TRUE}
+file <- "ERO_Detainers_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
 
 detainer_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
   janitor::clean_names() %>% 
@@ -38,8 +38,8 @@ detainer_df <- read_excel(here('analyze', 'input', file), skip=6) %>%
 detainer_ids <- unique(detainer_df$unique_identifier)
 ```
 
-```{r setup_encounters}
-file <- "ERO Encounters_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
+```{r setup_encounters, message=FALSE, warning=FALSE, include=TRUE}
+file <- "ERO_Encounters_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
 
 encounter_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
   janitor::clean_names() %>% 
@@ -49,8 +49,8 @@ encounter_df <- read_excel(here('analyze', 'input', file), skip=6) %>%
 encounter_ids <- unique(encounter_df$unique_identifier)
 ```
 
-```{r setup_arrests}
-file <- "ERO Admin Arrests_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
+```{r setup_arrests, message=FALSE, warning=FALSE, include=TRUE}
+file <- "ERO_Admin_Arrests_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
 
 arrest_df<- read_excel(here('analyze', 'input', file), skip=6) %>% 
   janitor::clean_names() %>% 
@@ -64,8 +64,8 @@ arrest_df<- read_excel(here('analyze', 'input', file), skip=6) %>%
 arrest_ids <- unique(arrest_df$unique_identifier)
 ```
 
-```{r setup_detention}
-file <- "ICE Detentions_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
+```{r setup_detention, message=FALSE, warning=FALSE, include=TRUE}
+file <- "ICE_Detentions_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
 
 detention_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
   janitor::clean_names() %>% 
@@ -198,7 +198,7 @@ ggplot(detainers_of_interest, aes(x=detainer_prepare_date.detainer)) +
   ggtitle("Date Prepared of Detainers Sharing Unique Identifiers with Arrests (Time Filter)")
 ```
 
-In total, there are `r nrows(detainer_arrest_of_interest)` detainers of interest, as shown in the following table.
+In total, there are `r nrow(detainers_of_interest)` detainers of interest, as shown in the following table.
 ```{r}
 detainers_of_interest[c("unique_identifier", "detainer_prepare_date.detainer", "apprehension_date.arrest", "date_diff.detainer_arrest", "detention_facility.detainer")]
 ```
@@ -216,6 +216,9 @@ date_diff_by_facility
 This section attempts to analyze various "enforcement pathways" in the Pacific Northwest by joining data across encounter, arrest, and detention datasets. The following subsections analyze enforcement pathways for detentions in Washington, arrests in Seattle AOR, and encounters in Seattle AOR.
 
 ```{r}
+
+# PN comment: Selecting distinct detention IDs will only represent a given detained person's first (or last, depending on sorting) detention record, is this what we want? (Same if multuple arrests/encounters/detainers but less of an issue because fewer repeat IDs)
+
 detention_df_wa_uq <- detention_df %>% 
   filter(state.detention == "WA") %>% 
   arrange(desc(stay_book_in_date_time.detention)) %>% 
