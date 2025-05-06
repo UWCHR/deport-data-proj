@@ -85,26 +85,30 @@ detention_ids <- unique(detention_df$unique_identifier)
 # Unique Identifier Analysis
 ```{r}
 # Counts the number of times each unique identifier appears and the number of unique identifiers per count
+percent <- function(x, digits = 2, format = "f", ...) {
+  paste0(formatC(100 * x, format = format, digits = digits, ...), "%")
+}
+
 summarize_id_counts <- function(df) {
   id_count <- df %>% 
     count(unique_identifier, sort=TRUE, name="count") %>% 
-    mutate(prop = count / nrow(df))
+    mutate(pct = percent(count / nrow(df)))
   
   count_analysis <- id_count %>% 
     count(count, sort=TRUE, name="num_ids") %>% 
-    mutate(prop = num_ids / nrow(id_count))
+    mutate(pct = percent(num_ids / nrow(id_count)))
   
   print(id_count)
   print(count_analysis)
   
   num_missing <- unlist(id_count[is.na(id_count$unique_identifier), 2], use.names=FALSE)
-  prop_missing <- unlist(id_count[is.na(id_count$unique_identifier), 3], use.names=FALSE)
+  pct_missing <- unlist(id_count[is.na(id_count$unique_identifier), 3], use.names=FALSE)
   num_once <- unlist(count_analysis[count_analysis$count == 1, 2], use.names=FALSE)
-  prop_once <- unlist(count_analysis[count_analysis$count == 1, 3], use.names=FALSE)
+  pct_once <- unlist(count_analysis[count_analysis$count == 1, 3], use.names=FALSE)
   id_summary <- data.frame(num_missing=num_missing,
-                           prop_missing=prop_missing,
+                           pct_missing=pct_missing,
                            num_once=num_once,
-                           prop_once=prop_once)
+                           pct_once=pct_once)
   return(id_summary)
 }
 ```
@@ -150,9 +154,9 @@ detainer_df_wa <- detainer_df %>%
   filter(facility_state.detainer == "WASHINGTON")
 
 detainer_arrest_df_wa <- inner_join(detainer_df_wa, arrest_df,
-                                 by="unique_identifier",
-                                 na_matches='never',
-                                 relationship='many-to-many') %>% 
+                                    by="unique_identifier",
+                                    na_matches='never',
+                                    relationship='many-to-many') %>% 
   mutate(date_diff.detainer_arrest = difftime(apprehension_date.arrest, detainer_prepare_date.detainer, units="days")) %>%
   filter(date_diff.detainer_arrest >= 0) %>%
   filter(!(detention_facility.detainer %in% c("SEATAC FED.DET.CENTER", "STATE PRISON, SHELTON", "US MARSHALS, YAKIMA", "US MARSHALS, SPOKANE,WA", "WASHINGTON STATE CORRECTIONS", "STAFFORD CREEK CORRECTIONS"))) %>%
@@ -256,28 +260,30 @@ summarize_pathways <- function(df1, df2, df3) {
               na_matches='never')
   
   joined_df_count_geo <- joined_df %>% 
-    count(responsible_site.encounter, detention_facility_code.detention, name="count", sort=TRUE)
+    count(responsible_site.encounter, detention_facility_code.detention, name="count", sort=TRUE) %>% 
+    mutate(pct = percent(count / nrow(joined_df)))
   print(joined_df_count_geo)
   
   joined_df_count_method <- joined_df %>% 
-    count(event_type.encounter, apprehension_method.arrest, name="count", sort=TRUE)
+    count(event_type.encounter, apprehension_method.arrest, name="count", sort=TRUE) %>% 
+    mutate(pct = percent(count / nrow(joined_df)))
   print(joined_df_count_method)
   
   print(nrow(joined_df))
 }
 ```
 
-## Detention
+## WA Detentions
 ```{r}
 summarize_pathways(detention_df_wa_uq, encounter_df_uq, arrest_df_uq)
 ```
 
-## Arrest
+## Seattle AOR Arrests
 ```{r}
 summarize_pathways(arrest_df_wa_uq, encounter_df_uq, detention_df_uq)
 ```
 
-## Encounter
+## Seattle AOR Encounters
 ```{r}
 summarize_pathways(encounter_df_wa_uq, arrest_df_uq, detention_df_uq)
 ```
