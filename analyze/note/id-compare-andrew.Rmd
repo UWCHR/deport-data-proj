@@ -264,6 +264,12 @@ summarize_pathways <- function(df1, df2, df3) {
               by="unique_identifier",
               na_matches='never')
   
+  joined_df_pre_trump <- joined_df %>% 
+    filter(filter_var <= as.Date("2025-01-20"))
+  
+  joined_df_post_trump <- joined_df %>% 
+    filter(filter_var > as.Date("2025-01-20"))
+  
   joined_df_count_geo <- joined_df %>% 
     count(responsible_site.encounter, detention_facility_code.detention, name="count", sort=TRUE) %>% 
     mutate(pct = percent(count / nrow(joined_df)))
