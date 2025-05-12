@@ -396,7 +396,12 @@ to_join <- arr %>%
 
 to_join <- to_join[!duplicated(to_join$unique_identifier), ]
 
+arr_ids <- arr$unique_identifier
+
 df <- df %>% left_join(to_join, by='unique_identifier')
+
+df <- df %>% 
+  mutate(id_in_arr = unique_identifier %in% arr_ids)
 
 rm(to_join)
 
@@ -461,7 +466,7 @@ temp_df <- df %>%
   filter(detention_facility_code == "CSCNWWA")
 
 # Apply function to timeline
-example_headcount <- lapply(timeline, headcounter, df=temp_df, group_vars=c('gender'))
+example_headcount <- lapply(timeline, headcounter, df=temp_df, group_vars=c('id_in_arr'))
 
 # Transform output into data frame
 example_headcount_data <- map_dfr(example_headcount, bind_rows)
@@ -469,12 +474,12 @@ example_headcount_data <- map_dfr(example_headcount, bind_rows)
 # Plot headcount
 p1 <- example_headcount_data %>% 
   filter(date >= "2023-11-15") %>% 
-  ggplot(aes(x = date, y = n, color = gender), group = gender ) +
-  geom_line(position='stack') +
-  labs(title = "Daily detained population by `gender`",
+  ggplot(aes(x = date, y = n, color = id_in_arr), group = id_in_arr ) +
+  geom_line() +
+  labs(title = "Daily detained population by `id_in_arr`",
        subtitle = "Northwest ICE Processing Center")
 
-plotly::ggplotly(p1)
+p1
 
 ```
 
@@ -487,7 +492,7 @@ temp_df <- df %>%
          placement_count > 1)
 
 # Apply function to timeline
-example_headcount <- lapply(timeline, headcounter, df=temp_df, group_vars=c('prev_aor'))
+example_headcount <- lapply(timeline, headcounter, df=temp_df, group_vars=c('first_aor'))
 
 # Transform output into data frame
 example_headcount_data <- map_dfr(example_headcount, bind_rows)
@@ -495,12 +500,12 @@ example_headcount_data <- map_dfr(example_headcount, bind_rows)
 # Plot headcount
 p1 <- example_headcount_data %>% 
   filter(date >= "2023-11-15") %>% 
-  ggplot(aes(x = date, y = n, color = prev_aor), group = prev_aor ) +
+  ggplot(aes(x = date, y = n, color = first_aor), group = first_aor ) +
   geom_line() +
-  labs(title = "Daily detained population by `prev_aor`",
+  labs(title = "Daily detained population by `first_aor`",
        subtitle = "Northwest ICE Processing Center")
 
-plotly::ggplotly( p1)
+plotly::ggplotly(p1)
 
 ```
 

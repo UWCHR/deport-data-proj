@@ -96,7 +96,7 @@ p1 <- df %>%
   ggplot(aes(x = date, y = n, color = known_facil)) +
   geom_line()
 
-p1
+plotly::ggplotly(p1)
 
 ```
 
@@ -187,7 +187,7 @@ p2.1
 
 ```{r old_headcount}
 
-old_headcount <- read_delim(here::here('analyze', 'input', 'headcount_fy11-24ytd.csv.gz')) %>% 
+old_headcount <- read_delim(here::here('analyze', 'input', 'headcount_fy12-24ytd.csv.gz')) %>% 
   mutate(dataset = "UWCHR") %>% 
   filter(date >= "2011-11-01")
 
@@ -205,6 +205,34 @@ p1 <- dat %>%
   geom_line() +
   ylim(0, NA) +
   labs(title = "National ICE detention population, Nov. 2011 - Feb. 2025",
+       subtitle = "Comparison of UWCHR, Deportation Data Project datasets")
+
+p1
+
+```
+
+```{r old_headcount_cscnwwa}
+
+old_headcount <- read_delim(here::here('analyze', 'input', 'headcount_fy12-24ytd.csv.gz')) %>% 
+  mutate(dataset = "UWCHR") %>% 
+  filter(date >= "2011-11-01",
+         detention_facility_code == "CSCNWWA")
+
+new_headcount <- df %>% 
+  filter(date >= "2023-11-15",
+         detention_facility_code == "CSCNWWA") %>%
+  dplyr::select(date, n, detention_facility_code) %>% 
+  mutate(dataset = "Deportation Data Project")
+
+dat <- rbind(old_headcount, new_headcount)
+
+p1 <- dat %>% 
+  group_by(dataset, date) %>% 
+  summarize(n = sum(n)) %>% 
+  ggplot(aes(x = date, y = n, color = dataset)) +
+  geom_line() +
+  ylim(0, NA) +
+  labs(title = "NWDC detention population, Nov. 2011 - Feb. 2025",
        subtitle = "Comparison of UWCHR, Deportation Data Project datasets")
 
 p1
