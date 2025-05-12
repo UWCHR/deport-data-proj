@@ -1,0 +1,172 @@
+---
+title: "Analysis of Detainers of Interest"
+author: "UWCHR"
+date: "2025-03-31"
+output:
+    html_document:
+        html_preview: true
+        toc: true
+        toc_depth: 3
+        toc_float: true
+        code_folding: hide
+---
+
+# Setup
+```{r setup, message=FALSE, warning=FALSE, include=TRUE}
+options(scipen = 1000000)
+
+library(pacman)
+
+p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, ggVennDiagram)
+```
+
+```{r setup_facilities, message=FALSE, warning=FALSE, include=TRUE}
+file <- "facilities.csv"
+
+facilities_df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
+  janitor::clean_names()
+```
+
+```{r setup_detainers, message=FALSE, warning=FALSE, include=TRUE}
+file <- "ERO_Detainers_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
+
+detainer_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
+  janitor::clean_names() %>% 
+  mutate(date_diff = difftime(detainer_prepare_date, apprehension_date, units='days')) %>% 
+  rename_with(~ paste(., "detainer", sep="."), .cols=-unique_identifier)
+
+detainer_ids <- unique(detainer_df$unique_identifier)
+```
+
+```{r setup_encounters, message=FALSE, warning=FALSE, include=TRUE}
+file <- "ERO_Encounters_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
+
+encounter_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
+  janitor::clean_names() %>% 
+  mutate(event_date = as.Date(event_date)) %>% 
+  rename_with(~ paste(., "encounter", sep="."), .cols=-unique_identifier)
+
+encounter_ids <- unique(encounter_df$unique_identifier)
+```
+
+```{r setup_arrests, message=FALSE, warning=FALSE, include=TRUE}
+file <- "ERO_Admin_Arrests_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
+
+arrest_df<- read_excel(here('analyze', 'input', file), skip=6) %>% 
+  janitor::clean_names() %>% 
+  mutate(apprehension_date = as.Date(apprehension_date)) |>
+  mutate(apprehension_method = fct(apprehension_method)) |>
+  mutate(criminality = apprehension_criminality == "1 Convicted Criminal") |>
+  mutate(n_dupe = row_number(), .by = c("apprehension_date", "apprehension_method", "apprehension_criminality", "unique_identifier")) |>
+  filter(is.na(unique_identifier) | n_dupe == 1) %>%
+  rename_with(~ paste(., "arrest", sep="."), .cols=-unique_identifier)
+
+arrest_ids <- unique(arrest_df$unique_identifier)
+```
+
+```{r setup_detention, message=FALSE, warning=FALSE, include=TRUE}
+file <- "ICE_Detentions_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
+
+detention_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
+  janitor::clean_names() %>% 
+  mutate(stay_book_in_date_time = as.Date(stay_book_in_date_time, format = "%m/%d/%Y %H:%M"),
+         book_in_date_time = as.Date(book_in_date_time, format = "%m/%d/%Y %H:%M"),
+         stay_book_out_date_time = as.Date(stay_book_out_date_time, format = "%m/%d/%Y %H:%M"),
+         stay_book_in_date_time = as.Date(stay_book_out_date, format = "%m/%d/%Y %H:%M"),
+         book_in_fy = substr(quarter(book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4),
+         stay_book_in_fy = substr(quarter(stay_book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4)) %>% 
+  left_join(facilities_df, by=c("detention_facility_code" = "detloc")) %>% 
+  rename_with(~ paste(., "detention", sep="."), .cols=-unique_identifier)
+
+detention_ids <- unique(detention_df$unique_identifier)
+```
+
+
+```{r}
+# Counts the number of times each unique identifier appears and the number of unique identifiers per count
+percent <- function(x, digits = 2, format = "f", ...) {
+  paste0(formatC(100 * x, format = format, digits = digits, ...), "%")
+}
+```
+
+
+## Enforcement Pathways
+This section attempts to analyze various "enforcement pathways" in the Pacific Northwest by joining data across encounter, arrest, and detention datasets. The following subsections analyze enforcement pathways for detentions in Washington, arrests in Seattle AOR, and encounters in Seattle AOR.
+
+```{r}
+
+detention_df_wa_uq <- detention_df %>% 
+  filter(state.detention == "WA") %>% 
+  arrange(desc(stay_book_in_date_time.detention)) %>% 
+  distinct(unique_identifier, .keep_all=TRUE)
+
+detention_df_uq <- detention_df %>% 
+  arrange(desc(stay_book_in_date_time.detention)) %>% 
+  distinct(unique_identifier, .keep_all=TRUE)
+
+encounter_df_wa_uq <- encounter_df %>% 
+  filter(responsible_aor.encounter == "Seattle Area of Responsibility") %>% 
+  arrange(desc(event_date.encounter)) %>% 
+  distinct(unique_identifier, .keep_all=TRUE)
+
+encounter_df_uq <- encounter_df %>% 
+  arrange(desc(event_date.encounter)) %>% 
+  distinct(unique_identifier, .keep_all=TRUE)
+
+arrest_df_wa_uq <- arrest_df %>% 
+  filter(apprehension_aor.arrest == "Seattle Area of Responsibility") %>% 
+  arrange(desc(apprehension_date.arrest)) %>% 
+  distinct(unique_identifier, .keep_all=TRUE)
+
+arrest_df_uq <- arrest_df %>% 
+  arrange(desc(apprehension_date.arrest)) %>% 
+  distinct(unique_identifier, .keep_all=TRUE)
+
+```
+
+```{r}
+summarize_pathways <- function(df1, df2, df3) {
+  joined_df <- df1 %>% 
+    left_join(df2,
+            by="unique_identifier",
+            na_matches='never') %>% 
+    left_join(df3,
+              by="unique_identifier",
+              na_matches='never')
+  
+  joined_df_count_geo <- joined_df %>% 
+    count(responsible_site.encounter, detention_facility_code.detention, name="count", sort=TRUE) %>% 
+    mutate(pct = percent(count / nrow(joined_df)))
+  print(joined_df_count_geo)
+  
+  joined_df_count_method <- joined_df %>% 
+    count(event_type.encounter, apprehension_method.arrest, name="count", sort=TRUE) %>% 
+    mutate(pct = percent(count / nrow(joined_df)))
+  print(joined_df_count_method)
+  
+  print(nrow(joined_df))
+}
+```
+
+## WA Detentions
+```{r}
+summarize_pathways(detention_df_wa_uq %>% filter(stay_book_in_date_time.detention < as.Date("2025-01-20")), encounter_df_uq, arrest_df_uq)  # Pre Trump
+summarize_pathways(detention_df_wa_uq %>% filter(stay_book_in_date_time.detention >= as.Date("2025-01-20")), encounter_df_uq, arrest_df_uq)  # Post Trump
+```
+
+## Seattle AOR Arrests
+```{r}
+summarize_pathways(arrest_df_wa_uq %>% filter(apprehension_date.arrest < as.Date("2025-01-20")), encounter_df_uq, detention_df_uq)  # Pre Trump
+summarize_pathways(arrest_df_wa_uq %>% filter(apprehension_date.arrest >= as.Date("2025-01-20")), encounter_df_uq, detention_df_uq)  # Post Trump
+```
+
+## Seattle AOR Encounters
+```{r}
+summarize_pathways(encounter_df_wa_uq %>% filter(event_date.encounter < as.Date("2025-01-20")), arrest_df_uq, detention_df_uq)  # Pre Trump
+summarize_pathways(encounter_df_wa_uq %>% filter(event_date.encounter >= as.Date("2025-01-20")), arrest_df_uq, detention_df_uq)  # Post Trump
+```
+
+#PN thoughts on next steps:
+
+- Look at difference in these enforcement pathways post-Trump inauguration, compared to earlier period of dataset and/or last three months of Biden admin. Changes in rank or relationship between encounter-arrest-detention locations, methods?
+- Look at full detention pathways, not just initial book-in (double check what is happening when you select a single record per unique ID in detentions data). Changes post-Trump? Separate analysis for detentions not in arrests dataset, or not in WA. (Detentions with no associated arrest either represent transfers from CBP or, less likely, arrests pre-dating release of dataset.)
