@@ -18,7 +18,7 @@ options(scipen = 1000000)
 
 library(pacman)
 
-p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, digest)
+p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, digest, ggsankeyfier)
 
 file <- "ice_detentions_nov23-feb25.csv.gz"
 
@@ -538,5 +538,23 @@ p1 <- example_headcount_data %>%
        subtitle = "Northwest ICE Processing Center")
 
 p1
+
+```
+
+```{r sankey-test}
+
+nwdc_detentions <- df[df$detention_facility_code == "CSCNWWA", 'unique_identifier']
+
+dat <- df %>% 
+  filter(unique_identifier %in% unlist(nwdc_detentions)) %>% 
+  dplyr::select(unique_identifier, detention_facility_code, placement_count, stay_count) %>% 
+  mutate(unique_identifier = paste(unique_identifier, stay_count, sep = '-'))
+
+dat_wide <- dat %>% 
+  pivot_wider(id_cols = c(unique_identifier), names_from = placement_count, names_prefix = "facil_", values_from = detention_facility_code)
+
+
+p1 <- dat %>% 
+  ggplot(a)
 
 ```
