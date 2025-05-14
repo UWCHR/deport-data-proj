@@ -461,51 +461,64 @@ headcounter <- function(date, df, group_vars) {
 
 ```{r facil_headcount}
 
-# # Generate limited sample dataset
-# temp_df <- df %>% 
-#   filter(detention_facility_code == "CSCNWWA")
-# 
-# # Apply function to timeline
-# example_headcount <- lapply(timeline, headcounter, df=temp_df, group_vars=c('id_in_arr'))
-# 
-# # Transform output into data frame
-# example_headcount_data <- map_dfr(example_headcount, bind_rows)
-# 
-# # Plot headcount
-# p1 <- example_headcount_data %>% 
-#   filter(date >= "2023-11-15") %>% 
-#   ggplot(aes(x = date, y = n, color = id_in_arr), group = id_in_arr ) +
-#   geom_line() +
-#   labs(title = "Daily detained population by `id_in_arr`",
-#        subtitle = "Northwest ICE Processing Center")
-# 
-# p1
+# Generate limited sample dataset
+temp_df <- df %>%
+  filter(detention_facility_code == "CSCNWWA")
+
+top <- temp_df %>%
+  count(stay_release_reason) %>%
+  arrange(desc(n)) %>%
+  head(10)
+
+# Apply function to timeline
+example_headcount <- lapply(timeline, headcounter, df=temp_df, group_vars=c('stay_release_reason'))
+
+# Transform output into data frame
+example_headcount_data <- map_dfr(example_headcount, bind_rows)
+
+# Plot headcount
+p1 <- example_headcount_data %>%
+  mutate(stay_release_reason =
+           case_when(stay_release_reason %in% top$stay_release_reason ~ stay_release_reason,
+                                         is.na(stay_release_reason) ~ NA,
+                                         TRUE ~ "ALL OTHERS")) %>% 
+  filter(date >= "2023-11-15") %>%
+  ggplot(aes(x = date, y = n, color = stay_release_reason), group = stay_release_reason ) +
+  geom_line() +
+  labs(title = "Daily detained population by `stay_release_reason`",
+       subtitle = "Northwest ICE Processing Center")
+
+p1
 
 ```
 
 
 ```{r facil_headcount}
 
-# # Generate limited sample dataset
-# temp_df <- df %>% 
-#   filter(detention_facility_code == "CSCNWWA",
-#          placement_count > 1)
-# 
-# # Apply function to timeline
-# example_headcount <- lapply(timeline, headcounter, df=temp_df, group_vars=c('first_aor'))
-# 
-# # Transform output into data frame
-# example_headcount_data <- map_dfr(example_headcount, bind_rows)
-# 
-# # Plot headcount
-# p1 <- example_headcount_data %>% 
-#   filter(date >= "2023-11-15") %>% 
-#   ggplot(aes(x = date, y = n, color = first_aor), group = first_aor ) +
-#   geom_line() +
-#   labs(title = "Daily detained population by `first_aor`",
-#        subtitle = "Northwest ICE Processing Center")
-# 
-# plotly::ggplotly(p1)
+# Generate limited sample dataset
+temp_df <- df %>%
+  filter(detention_facility_code == "CSCNWWA",
+         placement_count > 1)
+
+# Apply function to timeline
+example_headcount <- lapply(timeline, headcounter, df=temp_df, group_vars=c('prev_facil'))
+
+# Transform output into data frame
+example_headcount_data <- map_dfr(example_headcount, bind_rows) %>% 
+  filter(date >= "2023-11-15") %>%
+  mutate(week = floor_date(date, "week", week_start = "Monday")) %>% 
+  group_by(week, prev_facil) %>% 
+  summarize(adp = mean(n))
+
+# Plot headcount
+p1 <- example_headcount_data %>%
+  
+  ggplot(aes(x = week, y = adp, color = prev_facil), group = prev_facil ) +
+  geom_line() +
+  labs(title = "Weekly ADP population by `prev_facil`",
+       subtitle = "Northwest ICE Processing Center")
+
+plotly::ggplotly(p1)
 
 ```
 
