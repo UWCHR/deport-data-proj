@@ -187,7 +187,7 @@ p2.1
 
 ```{r old_headcount}
 
-old_headcount <- read_delim(here::here('analyze', 'input', 'headcount_fy12-24ytd.csv.gz')) %>% 
+old_headcount <- read_delim(here::here('analyze', 'input', 'headcount_fy11-24ytd.csv.gz')) %>% 
   mutate(dataset = "UWCHR") %>% 
   filter(date >= "2011-11-01")
 
@@ -211,9 +211,15 @@ p1
 
 ```
 
+```{r headcount_diff}
+
+
+
+```
+
 ```{r old_headcount_cscnwwa}
 
-old_headcount <- read_delim(here::here('analyze', 'input', 'headcount_fy12-24ytd.csv.gz')) %>% 
+old_headcount <- read_delim(here::here('analyze', 'input', 'headcount_fy11-24ytd.csv.gz')) %>% 
   mutate(dataset = "UWCHR") %>% 
   filter(date >= "2011-11-01",
          detention_facility_code == "CSCNWWA")
