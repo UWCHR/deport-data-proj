@@ -1,6 +1,6 @@
 # Analysis of ICE datasets via Deportation Data Project
 
-This repository performs preliminary exploratory analysis of immigration enforcement data obtained via FOIA by the [Deportation Data Project](https://deportationdata.org/).
+This repository performs exploratory analysis of immigration enforcement data obtained via FOIA by the [Deportation Data Project](https://deportationdata.org/). Results of scripts and notebooks in this repository should be considered preliminary and interpreted with caution.
 
 This analysis follows that performed on data obtained by UWCHR and analyzed in https://github.com/uwchr/ice-enforce and https://github.com/UWCHR/ice-detain; for more information see associated notebooks at https://uwchr.github.io/ice-enforce/ and https://uwchr.github.io/ice-detain/.
 
