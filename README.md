@@ -1,12 +1,12 @@
 # Analysis of ICE datasets via Deportation Data Project
 
-This repository performs preliminary exploratory analysis of immigration enforcement data obtained via FOIA by the [Deportation Data Project](https://deportationdata.org/). This analysis follows that performed on data obtained by UWCHR and analyzed in [https://github.com/uwchr/ice-enforce] and [https://github.com/UWCHR/ice-detain]; for more information see associated notebooks at [https://uwchr.github.io/ice-enforce/] and [https://uwchr.github.io/ice-detain/].
+This repository performs preliminary exploratory analysis of immigration enforcement data obtained via FOIA by the [Deportation Data Project](https://deportationdata.org/). This analysis follows that performed on data obtained by UWCHR and analyzed in https://github.com/uwchr/ice-enforce and https://github.com/UWCHR/ice-detain; for more information see associated notebooks at https://uwchr.github.io/ice-enforce/ and https://uwchr.github.io/ice-detain/.
 
 ## Repository description
 
 ### Data
 
-Large files are excluded from this repository. Data for this repository can be downloaded via [https://deportationdata.org/data.html]; and via the associated UWCHR repositories linked above.
+Large files are excluded from this repository. Data for this repository can be downloaded via https://deportationdata.org/data.html; and via the associated UWCHR repositories linked above.
 
 To execute tasks in this repository, first download the data files linked above and ensure they are stored in the indicated directory within the Git respository: original datasets are stored in `import/input/` (we recommend renaming these files to replace space characters with underscores).
 
