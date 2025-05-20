@@ -66,6 +66,8 @@ sum(df$known_facil) / nrow(df)
 unknown_facil <- unique(df[df$known_facil == FALSE, c("detention_facility_code", "detention_facility")]) %>% 
   arrange(detention_facility)
 
+write_delim(unknown_facil, here::here('analyze', 'output', 'unknown_facilities_2025.csv'), delim=',')
+
 to_join <- known_facil %>% 
   dplyr::select(detloc, aor, state, circuit, over_72, type) %>% 
   rename(detention_facility_code = detloc,

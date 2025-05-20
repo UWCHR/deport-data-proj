@@ -187,7 +187,7 @@ p2.1
 
 ```{r old_headcount}
 
-old_headcount <- read_delim(here::here('analyze', 'input', 'headcount_fy11-24ytd.csv.gz')) %>% 
+old_headcount <- read_delim(here::here('analyze', 'input', 'headcount_fy12-24ytd.csv.gz')) %>% 
   mutate(dataset = "UWCHR") %>% 
   filter(date >= "2011-11-01")
 
@@ -213,7 +213,30 @@ p1
 
 ```{r headcount_diff}
 
+# Comparing period of overlap of UWCHR, DDP national detention data; for period from Nov. 15, 2023 through Jan. 4, 2024, difference between datasets no more than near 200 for a given day.
 
+dat_wide <- dat %>%
+  pivot_wider(id_cols = c('date', 'detention_facility_code'), names_from = 'dataset', values_from = "n")
+
+dat_wide_natl <- dat_wide %>% 
+  group_by(date) %>% 
+  summarize(n_uwchr = sum(UWCHR, na.rm=TRUE),
+            n_ddp = sum(`Deportation Data Project`, na.rm=TRUE)) %>% 
+  mutate(diff = n_uwchr - n_ddp)
+
+p1 <- dat_wide_natl %>% 
+  ggplot(aes(x = date, y = diff)) +
+  geom_line()
+
+p1
+
+p2 <- dat_wide_natl %>% 
+  filter(date >= "2023-11-15",
+         date <= "2024-01-04") %>% 
+  ggplot(aes(x = date, y = diff)) +
+  geom_line()
+
+p2
 
 ```
 
