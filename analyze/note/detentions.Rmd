@@ -632,3 +632,34 @@ p2
 # What does it mean for a detention stay to end as "Transferred"?
 
 ```
+
+```{r gtmo}
+
+gtmo <- df[df$detention_facility_code %in% c("GTMOACU", "GTMODCU"),]
+
+sum(gtmo$id_in_arr)
+
+gtmo_arr <- arr[arr$unique_identifier %in% gtmo$unique_identifier,]
+
+gtmo_arr_crim <- gtmo_arr %>% 
+  count(apprehension_criminality)
+
+gtmo_ice_arr <- gtmo[gtmo$unique_identifier %in% gtmo_arr$unique_identifier,]
+
+gtmo_prev_facil <- gtmo %>% 
+  count(prev_facil)
+
+gtmo_first_facil <- gtmo %>% 
+  count(first_facil)
+
+gtmo_longest_facil <- gtmo %>% 
+  count(longest_placement_facil)
+
+# No records of people previously detained at NWDC--is this wrong? Or did Jose transfer to Guantanamo happen after release of data to DDP? Or not detained at NWDC?
+
+cscnwwa_ids <- unlist(df[df$detention_facility_code == "CSCNWWA", "unique_identifier"])
+
+sum(cscnwwa_ids %in% gtmo$unique_identifier)
+
+```
+
