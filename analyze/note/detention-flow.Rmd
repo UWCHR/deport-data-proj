@@ -250,21 +250,63 @@ p1 + geom_sankeyedge(aes(fill = node), position = pos) +
   guides(fill = FALSE)
 ```
 
-```{r facil_pairs}
 
-df <- df %>% 
-  group_by(stayid) %>% 
-  arrange(stay_book_in_date_time, book_in_date_time) %>%
-  mutate(next_facil = lead(detention_facility_code, n=1)) %>% 
-  ungroup()
+```{r detention_flow_gitmo}
+
+gtmo_detentions <- df[df$detention_facility_code %in% c("GTMOACU", "GTMODCU"), 'unique_identifier']
 
 dat <- df %>% 
-  filter(unique_identifier %in% unlist(nwdc_detentions)) %>% 
-  dplyr::select(detention_facility_code, next_facil, placement_count) %>% 
+  filter(unique_identifier %in% unlist(gtmo_detentions)) %>% 
+  dplyr::select(unique_identifier, detention_facility_code, placement_count, stay_count, stay_release_reason) %>% 
+  mutate(unique_identifier = paste(unique_identifier, stay_count, sep = '-'))
+
+dat_wide <- dat %>% 
+  pivot_wider(id_cols = c(unique_identifier, stay_release_reason), names_from = placement_count, names_prefix = "facil_", values_from = detention_facility_code)
+
+flows_gtmo <- dat_wide %>% 
+  dplyr::select(-c(unique_identifier, stay_release_reason)) %>% 
   group_by_all() %>% 
   summarize(n = n()) %>% 
   arrange(desc(n))
 
+flows_w_outcome_gtmo <- dat_wide %>% 
+  filter(!is.na(stay_release_reason)) %>% 
+  dplyr::select(-c(unique_identifier)) %>% 
+  group_by_all() %>% 
+  summarize(n = n()) %>% 
+  arrange(desc(n))
 
+# Not sure how data should be managed to analyze flows between facilities;
+# was looking at `sankeyifier`, could revisit various graph analysis packages
 
+flows_gtmo_long <- flows_gtmo %>% 
+  pivot_stages_longer(stages_from = c("facil_1",
+                                      "facil_2",
+                                      "facil_3",
+                                      "facil_4",
+                                      "facil_5",
+                                      "facil_6",
+                                      "facil_7",
+                                      "facil_8",
+                                      "facil_9",
+                                      "facil_10",
+                                      "facil_11"),
+                      values_from = "n") %>% 
+  filter(!is.na(node))
+
+p1 <- ggplot(flows_gtmo_long,
+       aes(x = stage, y = n, group = node,
+           connector = connector, edge_id = edge_id)) +
+  geom_sankeyedge(v_space = "auto", alpha=.5, aes(fill = node)) +
+  geom_sankeynode(v_space = "auto") +
+  labs(title = "Detention flows thru Gitmo")
+
+pos <- position_sankey(v_space = "auto")
+pos_text <- position_sankey(v_space = "auto", nudge_x = 0.1)
+
+p1 + geom_sankeyedge(aes(fill = node), position = pos) +
+  geom_sankeynode(position = pos) +
+  geom_text(aes(label = node), stat = "sankeynode", position = pos_text, hjust = 0, cex = 2) +
+  scale_x_discrete(expand = expansion(add = c(0.2, .6))) +
+  guides(fill = FALSE)
 ```

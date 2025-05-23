@@ -637,6 +637,7 @@ p2
 
 gtmo <- df[df$detention_facility_code %in% c("GTMOACU", "GTMODCU"),]
 
+length(unique(gtmo$unique_identifier))
 sum(gtmo$id_in_arr)
 
 gtmo_arr <- arr[arr$unique_identifier %in% gtmo$unique_identifier,]
