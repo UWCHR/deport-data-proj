@@ -1,0 +1,270 @@
+---
+title: "ICE ERO-LESA detention data Nov. 2023-Feb. 2025"
+author: "UWCHR"
+date: "2025-03-25"
+output:
+    html_document:
+        html_preview: true
+        toc: true
+        toc_depth: 3
+        toc_float: true
+        code_folding: hide
+---
+
+
+```{r setup, message=FALSE, warning=FALSE, include=TRUE}
+
+options(scipen = 1000000)
+
+library(pacman)
+
+p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, digest, ggsankeyfier)
+
+file <- "ice_detentions_nov23-feb25.csv.gz"
+
+df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
+  janitor::clean_names() %>% 
+  mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
+         book_in_date_time = ymd_hms(book_in_date_time),
+         detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
+         stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
+         )
+
+```
+
+```{r known_facilities}
+
+known_facil <- read_delim(here::here('analyze', 'input', 'facilities.csv.gz'), delim ='|')
+
+df <- df %>% 
+  mutate(known_facil = detention_facility_code %in% unique(known_facil$detloc))
+
+# Most detention records involve known facilities (NIJC 2017 + UWCHR)
+sum(df$known_facil) / nrow(df)
+
+# List of "new" facilities
+unknown_facil <- unique(df[df$known_facil == FALSE, c("detention_facility_code", "detention_facility")]) %>% 
+  arrange(detention_facility)
+
+to_join <- known_facil %>% 
+  dplyr::select(detloc, aor, state, circuit, over_72, type) %>% 
+  rename(detention_facility_code = detloc,
+         detention_facility_aor = aor,
+         detention_facility_state = state,
+         detention_facility_circuit = circuit,
+         detention_facility_over_72 = over_72,
+         detention_facility_type = type)
+
+df <- df %>% 
+  left_join(to_join, by="detention_facility_code")
+
+detloc_aor <- known_facil %>% 
+  rename(detention_facility_code = detloc,
+         area_of_responsibility = aor) %>% 
+  distinct(detention_facility_code, area_of_responsibility) %>% 
+  arrange(detention_facility_code, area_of_responsibility)
+
+detloc_aor_list <- as.list(detloc_aor$detention_facility_code)
+
+names(detloc_aor_list) <- detloc_aor$area_of_responsibility
+
+df$first_aor <- names(detloc_aor_list)[match(df$first_facil, detloc_aor_list)]
+df$last_aor <- names(detloc_aor_list)[match(df$last_facil, detloc_aor_list)]
+df$prev_aor <- names(detloc_aor_list)[match(df$prev_facil, detloc_aor_list)]
+df$longest_aor <- names(detloc_aor_list)[match(df$longest_placement_facil, detloc_aor_list)]
+
+df <- df %>% 
+  mutate(detention_facility_region = case_when(detention_facility_aor == "ATL" ~ "Interior/Northern",
+          detention_facility_aor == "BAL" ~ "Interior/Northern",
+          detention_facility_aor == "BOS" ~ "Interior/Northern",
+          detention_facility_aor == "BUF" ~ "Interior/Northern",
+          detention_facility_aor == "CHI" ~ "Interior/Northern",
+          detention_facility_aor == "DAL" ~ "Interior/Northern",
+          detention_facility_aor == "DEN" ~ "Interior/Northern",
+          detention_facility_aor == "DET" ~ "Interior/Northern",
+          detention_facility_aor == "ELP" ~ "Southern",
+          detention_facility_aor == "HOU" ~ "Southern",
+          detention_facility_aor == "LOS" ~ "Interior/Northern",
+          detention_facility_aor == "MIA" ~ "Interior/Northern",
+          detention_facility_aor == "NEW" ~ "Interior/Northern",
+          detention_facility_aor == "NOL" ~ "Interior/Northern",
+          detention_facility_aor == "NYC" ~ "Interior/Northern",
+          detention_facility_aor == "PHI" ~ "Interior/Northern",
+          detention_facility_aor == "PHO" ~ "Southern",
+          detention_facility_aor == "SEA" ~ "Interior/Northern",
+          detention_facility_aor == "SFR" ~ "Interior/Northern",
+          detention_facility_aor == "SLC" ~ "Interior/Northern",
+          detention_facility_aor == "SNA" ~ "Southern",
+          detention_facility_aor == "SND" ~ "Southern",
+          detention_facility_aor == "SPM" ~ "Interior/Northern",
+          detention_facility_aor == "WAS" ~ "Interior/Northern"))
+
+```
+
+```{r detention_flow}
+
+nwdc_detentions <- df[df$detention_facility_code == "CSCNWWA", 'unique_identifier']
+
+dat <- df %>% 
+  filter(unique_identifier %in% unlist(nwdc_detentions)) %>% 
+  dplyr::select(unique_identifier, detention_facility_code, placement_count, stay_count, stay_release_reason) %>% 
+  mutate(unique_identifier = paste(unique_identifier, stay_count, sep = '-'))
+
+dat_wide <- dat %>% 
+  pivot_wider(id_cols = c(unique_identifier, stay_release_reason), names_from = placement_count, names_prefix = "facil_", values_from = detention_facility_code)
+
+flows <- dat_wide %>% 
+  dplyr::select(-c(unique_identifier, stay_release_reason)) %>% 
+  group_by_all() %>% 
+  summarize(n = n()) %>% 
+  arrange(desc(n))
+
+flows_w_outcome <- dat_wide %>% 
+  filter(!is.na(stay_release_reason)) %>% 
+  dplyr::select(-c(unique_identifier)) %>% 
+  group_by_all() %>% 
+  summarize(n = n()) %>% 
+  arrange(desc(n))
+
+# Not sure how data should be managed to analyze flows between facilities;
+# was looking at `sankeyifier`, could revisit various graph analysis packages
+
+```
+
+
+```{r detention_flow_pre_trump}
+
+nwdc_detentions <- df[df$detention_facility_code == "CSCNWWA", 'unique_identifier']
+
+dat <- df %>% 
+  filter(unique_identifier %in% unlist(nwdc_detentions),
+         stay_book_in_date_time > "2024-11-01",
+         stay_book_in_date_time < "2025-01-20") %>% 
+  dplyr::select(unique_identifier, detention_facility_code, placement_count, stay_count, stay_release_reason) %>% 
+  mutate(unique_identifier = paste(unique_identifier, stay_count, sep = '-'))
+
+dat_wide <- dat %>% 
+  pivot_wider(id_cols = c(unique_identifier, stay_release_reason), names_from = placement_count, names_prefix = "facil_", values_from = detention_facility_code)
+
+flows_pre_trump <- dat_wide %>% 
+  dplyr::select(-c(unique_identifier, stay_release_reason)) %>% 
+  group_by_all() %>% 
+  summarize(n = n()) %>% 
+  arrange(desc(n))
+
+flows_w_outcome_pre_trump <- dat_wide %>% 
+  filter(!is.na(stay_release_reason)) %>% 
+  dplyr::select(-c(unique_identifier)) %>% 
+  group_by_all() %>% 
+  summarize(n = n()) %>% 
+  arrange(desc(n))
+
+# Not sure how data should be managed to analyze flows between facilities;
+# was looking at `sankeyifier`, could revisit various graph analysis packages
+
+flows_pre_trump_long <- flows_pre_trump %>% 
+  filter(n > 5) %>%
+  pivot_stages_longer(stages_from = c("facil_1",
+                                      "facil_2",
+                                      "facil_3",
+                                      "facil_4",
+                                      "facil_5",
+                                      "facil_6"),
+                      values_from = "n") %>% 
+  filter(!is.na(node))
+
+p1 <- ggplot(flows_pre_trump_long,
+       aes(x = stage, y = n, group = node,
+           connector = connector, edge_id = edge_id)) +
+  geom_sankeyedge(v_space = "auto", alpha=.5, aes(fill = node)) +
+  geom_sankeynode(v_space = "auto", aes(fill=node)) +
+  labs(title = "Detention flows thru NWIPC",
+       subtitle = "Last three months Biden admin., > 5 ppl") +
+  guides(fill = FALSE)
+
+pos <- position_sankey(v_space = "auto")
+pos_text <- position_sankey(v_space = "auto", nudge_x = 0.1)
+
+p1 + geom_sankeyedge(aes(fill = node), position = pos) +
+  geom_sankeynode(position = pos) +
+  geom_text(aes(label = node), stat = "sankeynode", position = pos_text, hjust = 0, cex = 2) +
+  scale_x_discrete(expand = expansion(add = c(0.2, .6)))
+
+
+```
+
+```{r detention_flow_post_trump}
+
+nwdc_detentions <- df[df$detention_facility_code == "CSCNWWA", 'unique_identifier']
+
+dat <- df %>% 
+  filter(unique_identifier %in% unlist(nwdc_detentions),
+         stay_book_in_date_time >= "2025-01-20") %>% 
+  dplyr::select(unique_identifier, detention_facility_code, placement_count, stay_count, stay_release_reason) %>% 
+  mutate(unique_identifier = paste(unique_identifier, stay_count, sep = '-'))
+
+dat_wide <- dat %>% 
+  pivot_wider(id_cols = c(unique_identifier, stay_release_reason), names_from = placement_count, names_prefix = "facil_", values_from = detention_facility_code)
+
+flows_post_trump <- dat_wide %>% 
+  dplyr::select(-c(unique_identifier, stay_release_reason)) %>% 
+  group_by_all() %>% 
+  summarize(n = n()) %>% 
+  arrange(desc(n))
+
+flows_w_outcome_post_trump <- dat_wide %>% 
+  filter(!is.na(stay_release_reason)) %>% 
+  dplyr::select(-c(unique_identifier)) %>% 
+  group_by_all() %>% 
+  summarize(n = n()) %>% 
+  arrange(desc(n))
+
+# Not sure how data should be managed to analyze flows between facilities;
+# was looking at `sankeyifier`, could revisit various graph analysis packages
+
+flows_trump_long <- flows_post_trump %>% 
+  filter(n > 5) %>%
+  pivot_stages_longer(stages_from = c("facil_1",
+                                      "facil_2",
+                                      "facil_3",
+                                      "facil_4",
+                                      "facil_5"),
+                      values_from = "n") %>% 
+  filter(!is.na(node))
+
+p1 <- ggplot(flows_trump_long,
+       aes(x = stage, y = n, group = node,
+           connector = connector, edge_id = edge_id)) +
+  geom_sankeyedge(v_space = "auto", alpha=.5, aes(fill = node)) +
+  geom_sankeynode(v_space = "auto") +
+  labs(title = "Detention flows thru NWIPC",
+       subtitle = "First three weeks Trump admin., > 5 ppl")
+
+pos <- position_sankey(v_space = "auto")
+pos_text <- position_sankey(v_space = "auto", nudge_x = 0.1)
+
+p1 + geom_sankeyedge(aes(fill = node), position = pos) +
+  geom_sankeynode(position = pos) +
+  geom_text(aes(label = node), stat = "sankeynode", position = pos_text, hjust = 0, cex = 2) +
+  scale_x_discrete(expand = expansion(add = c(0.2, .6))) +
+  guides(fill = FALSE)
+```
+
+```{r facil_pairs}
+
+df <- df %>% 
+  group_by(stayid) %>% 
+  arrange(stay_book_in_date_time, book_in_date_time) %>%
+  mutate(next_facil = lead(detention_facility_code, n=1)) %>% 
+  ungroup()
+
+dat <- df %>% 
+  filter(unique_identifier %in% unlist(nwdc_detentions)) %>% 
+  dplyr::select(detention_facility_code, next_facil, placement_count) %>% 
+  group_by_all() %>% 
+  summarize(n = n()) %>% 
+  arrange(desc(n))
+
+
+
+```
