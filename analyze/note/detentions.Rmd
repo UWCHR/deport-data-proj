@@ -51,6 +51,24 @@ sum(is.na(df$unique_identifier))
 
 ```
 
+```{r initial_placement_check}
+
+sum(df$initial_placement_exact)
+sum(df$initial_placement_approx)
+
+first_reported_placement <- df %>% 
+  dplyr::select(unique_identifier, stayid, stay_book_in_date_time, book_in_date_time, initial_placement_exact, initial_placement_approx, placement_count) %>% 
+  filter(placement_count == 1)
+
+p1 <- first_reported_placement %>% 
+  mutate(book_in_year = year(stay_book_in_date_time)) %>% 
+  count(book_in_year, initial_placement_exact) %>% 
+  ggplot(aes(x = book_in_year, y = n, fill = initial_placement_exact)) +
+  geom_col()
+
+p1
+
+```
 
 ```{r known_facilities}
 
