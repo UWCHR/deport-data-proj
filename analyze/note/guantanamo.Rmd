@@ -34,7 +34,7 @@ df <- read_delim(here('analyze', 'input', file), delim='|') %>%
 gitmo_codes <- c("GTMOACU", "GTMODCU")
 
 # Get all placements at Guantanamo Bay detention facilities
-gitmo_detentions <- df[df$detention_facility_code %in% c("GTMOACU", "GTMODCU")]
+gitmo_detentions <- df[df$detention_facility_code %in% c("GTMOACU", "GTMODCU"),]
 
 # Confirm one record per individual unique identifier
 stopifnot(nrow(gitmo_detentions) == length(unique(gitmo_detentions$unique_identifier)))
@@ -246,10 +246,11 @@ gtmo_stays <- df[df$detention_facility_code %in% c("GTMOACU", "GTMODCU"), 'stayi
 
 dat <- df %>% 
   filter(stayid %in% unlist(gtmo_stays)) %>% 
-  dplyr::select(stayid, detention_facility_code, placement_count, current_placement)
+  dplyr::select(stayid, detention_facility_code, placement_count, stay_placements, current_placement) %>% 
+  mutate(relative_placement = placement_count - stay_placements)
 
 dat_wide <- dat %>% 
-  pivot_wider(id_cols = c(stayid), names_from = placement_count, names_prefix = "facil_", values_from = detention_facility_code)
+  pivot_wider(id_cols = c(stayid), names_from = relative_placement, names_prefix = "facil_n", values_from = detention_facility_code)
 
 flows_gtmo <- dat_wide %>% 
   dplyr::select(-c(stayid)) %>% 
@@ -261,17 +262,17 @@ flows_gtmo <- dat_wide %>%
 # was looking at `sankeyifier`, could revisit various graph analysis packages
 
 flows_gtmo_long <- flows_gtmo %>% 
-  pivot_stages_longer(stages_from = c("facil_1",
-                                      "facil_2",
-                                      "facil_3",
-                                      "facil_4",
-                                      "facil_5",
-                                      "facil_6",
-                                      "facil_7",
-                                      "facil_8",
-                                      "facil_9",
-                                      "facil_10",
-                                      "facil_11"),
+  pivot_stages_longer(stages_from = c("facil_n-10",
+"facil_n-9",
+"facil_n-8",
+"facil_n-7",
+"facil_n-6",
+"facil_n-5",
+"facil_n-4",
+"facil_n-3",
+"facil_n-2",
+"facil_n-1",
+                                      "facil_n0"),
                       values_from = "n") %>% 
   filter(!is.na(node))
 
@@ -289,5 +290,6 @@ p1 + geom_sankeyedge(aes(fill = node), position = pos) +
   geom_sankeynode(position = pos) +
   geom_text(aes(label = node), stat = "sankeynode", position = pos_text, hjust = 0, cex = 2) +
   scale_x_discrete(expand = expansion(add = c(0.2, .6))) +
-  guides(fill = FALSE)
+  guides(fill = FALSE) +
+  theme_minimal()
 ```
