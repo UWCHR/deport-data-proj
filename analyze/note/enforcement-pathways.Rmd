@@ -20,7 +20,23 @@ library(pacman)
 p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, ggVennDiagram)
 ```
 
+```{r}
+file <- "ice_detentions_nov23-feb25.csv.gz"
+
+detain_unique_stays_df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
+  janitor::clean_names() %>% 
+  mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
+         book_in_date_time = ymd_hms(book_in_date_time),
+         detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
+         stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
+         pre_trump = book_in_date_time < as.Date("2025-01-20")) %>% 
+  left_join(facilities_df, by=c("detention_facility_code" = "detloc"))
+
+detain_unique_stays_df
+```
+
 ```{r setup_facilities, message=FALSE, warning=FALSE, include=TRUE}
+# Running into problem with .gz version of facilities dataset
 file <- "facilities.csv"
 
 facilities_df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
@@ -83,17 +99,13 @@ detention_ids <- unique(detention_df$unique_identifier)
 
 ```{r}
 # Break down datasets by geography and pre vs. post Trump
-segment_df <- function(df, arrange, geo_filter) {
-  distinct_id <- function(df) {
-    return (arrange(df) %>% distinct(unique_identifier, .keep_all=TRUE))
-  }
-  
-  df_uq <- distinct_id(df)
-  df_wa_uq <- distinct_id(geo_filter(df))
-  df_pre_trump_uq <- distinct_id(filter(df, pre_trump == TRUE))
-  df_post_trump_uq <- distinct_id(filter(df, pre_trump == FALSE))
-  df_pre_trump_wa_uq <- distinct_id(geo_filter(filter(df, pre_trump == TRUE)))
-  df_post_trump_wa_uq <- distinct_id(geo_filter(filter(df, pre_trump == FALSE)))
+segment_df <- function(df, unique_fn, geo_filter) {
+  df_uq <- unique_fn(df)
+  df_wa_uq <- unique_fn(geo_filter(df))
+  df_pre_trump_uq <- unique_fn(filter(df, pre_trump == TRUE))
+  df_post_trump_uq <- unique_fn(filter(df, pre_trump == FALSE))
+  df_pre_trump_wa_uq <- unique_fn(geo_filter(filter(df, pre_trump == TRUE)))
+  df_post_trump_wa_uq <- unique_fn(geo_filter(filter(df, pre_trump == FALSE)))
   
   return (list("uq"=df_uq,
             "wa_uq"=df_wa_uq,
@@ -103,17 +115,17 @@ segment_df <- function(df, arrange, geo_filter) {
             "post_trump_wa_uq"=df_post_trump_wa_uq))
 }
 
-detention_dfs <- segment_df(detention_df,
-                            (function(df) return(arrange(df, desc(book_in_date_time)))),
-                            (function(df) return(filter(df, state == "WA"))))
+detention_dfs <- segment_df(detain_unique_stays_df,
+                           (function(df) return(df %>% filter(last_placement == TRUE))),
+                           (function(df) return(df %>% filter(state == "WA"))))
 
 encounter_dfs <- segment_df(encounter_df,
-                                    (function(df) return(arrange(df, desc(event_date)))),
-                                    (function(df) return(filter(df, responsible_aor == "Seattle Area of Responsibility"))))
+                           (function(df) return(df %>% arrange(desc(event_date)) %>% distinct(unique_identifier, .keep_all=TRUE))),
+                           (function(df) return(df %>% filter(responsible_aor == "Seattle Area of Responsibility"))))
 
 arrest_dfs <- segment_df(arrest_df,
-                                  (function(df) return(arrange(df, desc(apprehension_date)))),
-                                  (function(df) return(filter(df, apprehension_aor == "Seattle Area of Responsibility"))))
+                        (function(df) return(df %>% arrange(desc(apprehension_date)) %>% distinct(unique_identifier, .keep_all=TRUE))),
+                        (function(df) return(df %>% filter(apprehension_aor == "Seattle Area of Responsibility"))))
 ```
 
 
@@ -141,17 +153,22 @@ summarize_pathways <- function(df1, df2, df3, name1, name2, name3) {
               suffix=c("", paste(".", name3, sep="")),
               na_matches='never')
   
-  joined_df_count_geo <- joined_df %>% 
-    count(responsible_site, detention_facility_code, name="count", sort=TRUE) %>% 
+  joined_df_count <- joined_df %>%
+    count(responsible_site, detention_facility_code, name="count", sort=TRUE) %>%
     mutate(pct = percent(count / nrow(joined_df)))
-  print(joined_df_count_geo)
+  print(joined_df_count)
   
-  joined_df_count_method <- joined_df %>% 
-    count(event_type, apprehension_method, name="count", sort=TRUE) %>% 
+  joined_df_count <- joined_df %>%
+    count(event_type, apprehension_method, name="count", sort=TRUE) %>%
     mutate(pct = percent(count / nrow(joined_df)))
-  print(joined_df_count_method)
+  print(joined_df_count)
   
-  print(paste("Num Records: ", nrow(joined_df), ""))
+  joined_df_count <- joined_df %>% 
+      count(apprehension_method, detention_facility_code, name="count", sort=TRUE) %>% 
+      mutate(pct = percent(count / nrow(joined_df)))
+  print(joined_df_count)
+  
+  # print(paste("Num Records: ", nrow(joined_df), ""))
 }
 ```
 
@@ -179,6 +196,17 @@ summarize_pathways(encounter_dfs[["post_trump_wa_uq"]], arrest_dfs[["uq"]], dete
                    "encounter", "arrest", "detention")
 ```
 
+## CSCNWWA
+```{r}
+summarize_pathways(detention_dfs[["pre_trump_wa_uq"]] %>%
+                     filter(detention_facility_code == "CSCNWWA"),
+                   encounter_dfs[["uq"]], arrest_dfs[["uq"]],
+                   "detention", "encounter", "arrest")
+summarize_pathways(detention_dfs[["post_trump_wa_uq"]] %>%
+                     filter(detention_facility_code == "CSCNWWA"),
+                   encounter_dfs[["uq"]], arrest_dfs[["uq"]],
+                   "detention", "encounter", "arrest")
+```
 
 # Detention Analysis
 
@@ -229,6 +257,7 @@ analyze_detention_records(encounter_dfs[["post_trump_wa_uq"]], arrest_dfs[["uq"]
 ```
 
 ```{r}
+# Average time difference between book in date time and apprehension date
 detention_arrest_df <- arrest_dfs[["uq"]] %>% 
   inner_join(detention_dfs[["uq"]],
        by="unique_identifier",

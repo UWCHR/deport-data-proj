@@ -192,22 +192,22 @@ detention_id_summary_post_trump <- summarize_id_counts(detention_dfs[["post_trum
 This table summarizes key information about the frequency of unique identifiers for each datasets. For each dataset, the table displays the number and proportion of missing identifiers ('num_missing' and 'prop_missing'), and the number and proportion of unique identifiers that appear once ('num_once' and 'prop_once').
 
 ```{r}
-# df_name <- c("Detainer Pre-Trump", "Detainer Post-Trump", 
-#              "Encounter Pre-Trump", "Encounter Post-Trump",
-#              "Arrest Pre-Trump", "Arrest Post-Trump",
-#              "Detention Post-Trump", "Detention Post-Trump")
-# all_id_summaries <- rbind(detainer_id_summary_pre_trump, detainer_id_summary_post_trump,
-#                           encounter_id_summary_pre_trump, encounter_id_summary_post_trump,
-#                           arrest_id_summary_pre_trump, arrest_id_summary_post_trump,
-#                           detention_id_summary_pre_trump, detention_id_summary_post_trump)
-df_name <- c("Detainer", "Detainer WA",
-             "Encounter", "Encounter WA",
-             "Arrest", "Arrest WA",
-             "Detention", "Detention WA")
-all_id_summaries <- rbind(detainer_id_summary, detainer_id_summary_wa,
-                          encounter_id_summary, encounter_id_summary_wa,
-                          arrest_id_summary, arrest_id_summary_wa,
-                          detention_id_summary, detention_id_summary_wa)
+df_name <- c("Detainer Pre-Trump", "Detainer Post-Trump",
+             "Encounter Pre-Trump", "Encounter Post-Trump",
+             "Arrest Pre-Trump", "Arrest Post-Trump",
+             "Detention Post-Trump", "Detention Post-Trump")
+all_id_summaries <- rbind(detainer_id_summary_pre_trump, detainer_id_summary_post_trump,
+                          encounter_id_summary_pre_trump, encounter_id_summary_post_trump,
+                          arrest_id_summary_pre_trump, arrest_id_summary_post_trump,
+                          detention_id_summary_pre_trump, detention_id_summary_post_trump)
+# df_name <- c("Detainer", "Detainer WA",
+#              "Encounter", "Encounter WA",
+#              "Arrest", "Arrest WA",
+#              "Detention", "Detention WA")
+# all_id_summaries <- rbind(detainer_id_summary, detainer_id_summary_wa,
+#                           encounter_id_summary, encounter_id_summary_wa,
+#                           arrest_id_summary, arrest_id_summary_wa,
+#                           detention_id_summary, detention_id_summary_wa)
 all_id_summaries <- cbind(df_name, all_id_summaries)
 all_id_summaries
 ```
