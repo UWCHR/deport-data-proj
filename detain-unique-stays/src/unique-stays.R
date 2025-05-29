@@ -51,10 +51,13 @@ df <- df %>%
             stay_book_in_date_time, unit='days'),
          placement_length = difftime(detention_book_out_date_time,
             book_in_date_time, unit='days'),
-         stay_length_min = difftime(replace_na(stay_book_out_date_time, max_date),
+         stay_length_elapsed = difftime(replace_na(stay_book_out_date_time, max_date),
             stay_book_in_date_time, unit='days'),
-         placement_length_min = difftime(replace_na(detention_book_out_date_time, max_date),
-            book_in_date_time, unit='days'))
+         placement_length_elapsed = difftime(replace_na(detention_book_out_date_time, max_date),
+            book_in_date_time, unit='days'),
+         initial_placement_exact = stay_book_in_date_time == book_in_date_time,
+         initial_placement_approx = date(stay_book_in_date_time) == date(book_in_date_time)
+         )
 
 df <- df %>% 
   filter(!is.na(unique_identifier)) %>% 
@@ -75,9 +78,9 @@ df <- df %>%
          first_facil = detention_facility_code[[1]], 
          last_facil = detention_facility_code[[length(detention_facility_code)]],
          prev_facil = lag(detention_facility_code, n=1),
-         longest_placement_facil = detention_facility_code[which.max(placement_length_min)],
+         longest_placement_facil = detention_facility_code[which.max(placement_length_elapsed)],
          last_placement = placement_count == stay_placements,
-         longest_placement = placement_length_min == max(placement_length_min)
+         longest_placement = placement_length_elapsed == max(placement_length_elapsed)
          ) %>% 
   ungroup()
 

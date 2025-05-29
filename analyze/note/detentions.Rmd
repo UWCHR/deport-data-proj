@@ -51,6 +51,27 @@ sum(is.na(df$unique_identifier))
 
 ```
 
+```{r initial_placement_check}
+
+sum(df$initial_placement_exact)
+sum(df$initial_placement_approx)
+
+first_reported_placement <- df %>% 
+  filter(placement_count == 1)
+
+p1 <- first_reported_placement %>% 
+  mutate(book_in_year = year(stay_book_in_date_time)) %>% 
+  count(book_in_year, initial_placement_exact) %>% 
+  ggplot(aes(x = book_in_year, y = n, fill = initial_placement_exact)) +
+  geom_col()
+
+p1
+
+first_reported_placement %>% 
+  group_by(initial_placement_exact) %>% 
+  summarize(mean(stay_length_elapsed))
+
+```
 
 ```{r known_facilities}
 
@@ -127,6 +148,7 @@ df <- df %>%
 
 bookins_aor <- df %>% 
   filter(placement_count == 1,
+         initial_placement_exact == TRUE,
          stay_book_in_date_time >= "2024-01-01"
          ) %>% 
   mutate(yearmon = as.yearmon(stay_book_in_date_time),
@@ -210,6 +232,7 @@ p2
 
 dat <- df %>% 
   filter(placement_count == 1,
+         initial_placement_exact == TRUE,
          stay_book_in_date_time >= "2024-01-01"
          ) %>% 
   mutate(week = floor_date(book_in_date_time, "week", week_start = "Monday"),
@@ -242,8 +265,6 @@ p2
 ```
 
 ```{r pre_post_trump_change_transfers}
-
-# Is it correct to interpret all detention placements beyond first as "transfers"
 
 dat <- df %>% 
   filter(placement_count > 1,
@@ -282,6 +303,7 @@ p2
 
 dat <- df %>% 
   filter(placement_count == 1,
+         initial_placement_exact == TRUE,
          stay_book_in_date_time >= "2024-01-01"
          ) %>% 
   mutate(week = floor_date(book_in_date_time, "week", week_start = "Monday"),
@@ -632,34 +654,3 @@ p2
 # What does it mean for a detention stay to end as "Transferred"?
 
 ```
-
-```{r gtmo}
-
-gtmo <- df[df$detention_facility_code %in% c("GTMOACU", "GTMODCU"),]
-
-sum(gtmo$id_in_arr)
-
-gtmo_arr <- arr[arr$unique_identifier %in% gtmo$unique_identifier,]
-
-gtmo_arr_crim <- gtmo_arr %>% 
-  count(apprehension_criminality)
-
-gtmo_ice_arr <- gtmo[gtmo$unique_identifier %in% gtmo_arr$unique_identifier,]
-
-gtmo_prev_facil <- gtmo %>% 
-  count(prev_facil)
-
-gtmo_first_facil <- gtmo %>% 
-  count(first_facil)
-
-gtmo_longest_facil <- gtmo %>% 
-  count(longest_placement_facil)
-
-# No records of people previously detained at NWDC--is this wrong? Or did Jose transfer to Guantanamo happen after release of data to DDP? Or not detained at NWDC?
-
-cscnwwa_ids <- unlist(df[df$detention_facility_code == "CSCNWWA", "unique_identifier"])
-
-sum(cscnwwa_ids %in% gtmo$unique_identifier)
-
-```
-
