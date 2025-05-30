@@ -17,7 +17,15 @@ options(scipen = 1000000)
 
 library(pacman)
 
-p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, ggVennDiagram)
+p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, ggVennDiagram, digest, ggsankeyfier)
+```
+
+```{r setup_facilities, message=FALSE, warning=FALSE, include=TRUE}
+# Running into problem with .gz version of facilities dataset
+file <- "facilities.csv"
+
+facilities_df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
+  janitor::clean_names()
 ```
 
 ```{r}
@@ -29,18 +37,8 @@ detain_unique_stays_df <- read_delim(here('analyze', 'input', file), delim='|') 
          book_in_date_time = ymd_hms(book_in_date_time),
          detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
          stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
-         pre_trump = book_in_date_time < as.Date("2025-01-20")) %>% 
+         pre_trump = stay_book_in_date_time < as.Date("2025-01-20")) %>% 
   left_join(facilities_df, by=c("detention_facility_code" = "detloc"))
-
-detain_unique_stays_df
-```
-
-```{r setup_facilities, message=FALSE, warning=FALSE, include=TRUE}
-# Running into problem with .gz version of facilities dataset
-file <- "facilities.csv"
-
-facilities_df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
-  janitor::clean_names()
 ```
 
 ```{r setup_detainers, message=FALSE, warning=FALSE, include=TRUE}
@@ -81,20 +79,20 @@ arrest_ids <- unique(arrest_df$unique_identifier)
 ```
 
 ```{r setup_detention, message=FALSE, warning=FALSE, include=TRUE}
-file <- "ICE_Detentions_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
-
-detention_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
-  janitor::clean_names() %>% 
-  mutate(stay_book_in_date_time = as.Date(stay_book_in_date_time, format = "%m/%d/%Y %H:%M"),
-         book_in_date_time = as.Date(book_in_date_time, format = "%m/%d/%Y %H:%M"),
-         stay_book_out_date_time = as.Date(stay_book_out_date_time, format = "%m/%d/%Y %H:%M"),
-         stay_book_in_date_time = as.Date(stay_book_out_date, format = "%m/%d/%Y %H:%M"),
-         book_in_fy = substr(quarter(book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4),
-         stay_book_in_fy = substr(quarter(stay_book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4),
-         pre_trump = book_in_date_time < as.Date("2025-01-20")) %>% 
-  left_join(facilities_df, by=c("detention_facility_code" = "detloc"))
-
-detention_ids <- unique(detention_df$unique_identifier)
+# file <- "ICE_Detentions_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
+# 
+# detention_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
+#   janitor::clean_names() %>% 
+#   mutate(stay_book_in_date_time = as.Date(stay_book_in_date_time, format = "%m/%d/%Y %H:%M"),
+#          book_in_date_time = as.Date(book_in_date_time, format = "%m/%d/%Y %H:%M"),
+#          stay_book_out_date_time = as.Date(stay_book_out_date_time, format = "%m/%d/%Y %H:%M"),
+#          stay_book_in_date_time = as.Date(stay_book_out_date, format = "%m/%d/%Y %H:%M"),
+#          book_in_fy = substr(quarter(book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4),
+#          stay_book_in_fy = substr(quarter(stay_book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4),
+#          pre_trump = book_in_date_time < as.Date("2025-01-20")) %>% 
+#   left_join(facilities_df, by=c("detention_facility_code" = "detloc"))
+# 
+# detention_ids <- unique(detention_df$unique_identifier)
 ```
 
 ```{r}
@@ -146,23 +144,26 @@ summarize_pathways <- function(df1, df2, df3, name1, name2, name3) {
   joined_df <- df1 %>% 
     left_join(df2,
             by="unique_identifier",
-            suffix=c(paste(".", name1, sep=""), paste(".", name2, sep="")),
+            suffix=c("", paste(".", name2, sep="")),
             na_matches='never') %>% 
     left_join(df3,
               by="unique_identifier",
               suffix=c("", paste(".", name3, sep="")),
               na_matches='never')
   
+  # Encounter Site, Det Facility Code
   joined_df_count <- joined_df %>%
     count(responsible_site, detention_facility_code, name="count", sort=TRUE) %>%
     mutate(pct = percent(count / nrow(joined_df)))
   print(joined_df_count)
   
+  # Encounter Type, Arrest Method
   joined_df_count <- joined_df %>%
     count(event_type, apprehension_method, name="count", sort=TRUE) %>%
     mutate(pct = percent(count / nrow(joined_df)))
   print(joined_df_count)
   
+  # Arrest Method, Det Facility Code
   joined_df_count <- joined_df %>% 
       count(apprehension_method, detention_facility_code, name="count", sort=TRUE) %>% 
       mutate(pct = percent(count / nrow(joined_df)))
@@ -208,61 +209,265 @@ summarize_pathways(detention_dfs[["post_trump_wa_uq"]] %>%
                    "detention", "encounter", "arrest")
 ```
 
-# Detention Analysis
-
-How many records of people going from "non-detained docket control" to "non-custodial arrest" also have detention records pre vs. post Trump?
-
+# Visualizations
 ```{r}
-analyze_detention_records <- function(df1, df2) {
-  joined_df <- df1 %>% 
-    left_join(df2,
-              by="unique_identifier",
-              na_matches='never') %>% 
-    filter(event_type == "Non-Detained Docket Control" &
-           apprehension_method == "Non-Custodial Arrest") %>% 
-    mutate(detention_record = unique_identifier %in% detention_ids)  
+df <- detain_unique_stays_df %>% 
+  mutate(known_facil = detention_facility_code %in% unique(facilities_df$detloc)) %>% 
+  rename(detention_facility_aor = aor,
+         detention_facility_state = state,
+         detention_facility_circuit = circuit,
+         detention_facility_over_72 = over_72,
+         detention_facility_type = type)
+
+unknown_facil <- unique(df[df$known_facil == FALSE, c("detention_facility_code", "detention_facility")]) %>% 
+  arrange(detention_facility)
+
+detloc_aor <- facilities_df %>% 
+  rename(detention_facility_code = detloc,
+         area_of_responsibility = aor) %>% 
+  distinct(detention_facility_code, area_of_responsibility) %>% 
+  arrange(detention_facility_code, area_of_responsibility)
+
+detloc_aor_list <- as.list(detloc_aor$detention_facility_code)
+
+names(detloc_aor_list) <- detloc_aor$area_of_responsibility
+
+df$first_aor <- names(detloc_aor_list)[match(df$first_facil, detloc_aor_list)]
+df$last_aor <- names(detloc_aor_list)[match(df$last_facil, detloc_aor_list)]
+df$prev_aor <- names(detloc_aor_list)[match(df$prev_facil, detloc_aor_list)]
+df$longest_aor <- names(detloc_aor_list)[match(df$longest_placement_facil, detloc_aor_list)]
+
+df <- df %>% 
+  mutate(detention_facility_region = case_when(detention_facility_aor == "ATL" ~ "Interior/Northern",
+          detention_facility_aor == "BAL" ~ "Interior/Northern",
+          detention_facility_aor == "BOS" ~ "Interior/Northern",
+          detention_facility_aor == "BUF" ~ "Interior/Northern",
+          detention_facility_aor == "CHI" ~ "Interior/Northern",
+          detention_facility_aor == "DAL" ~ "Interior/Northern",
+          detention_facility_aor == "DEN" ~ "Interior/Northern",
+          detention_facility_aor == "DET" ~ "Interior/Northern",
+          detention_facility_aor == "ELP" ~ "Southern",
+          detention_facility_aor == "HOU" ~ "Southern",
+          detention_facility_aor == "LOS" ~ "Interior/Northern",
+          detention_facility_aor == "MIA" ~ "Interior/Northern",
+          detention_facility_aor == "NEW" ~ "Interior/Northern",
+          detention_facility_aor == "NOL" ~ "Interior/Northern",
+          detention_facility_aor == "NYC" ~ "Interior/Northern",
+          detention_facility_aor == "PHI" ~ "Interior/Northern",
+          detention_facility_aor == "PHO" ~ "Southern",
+          detention_facility_aor == "SEA" ~ "Interior/Northern",
+          detention_facility_aor == "SFR" ~ "Interior/Northern",
+          detention_facility_aor == "SLC" ~ "Interior/Northern",
+          detention_facility_aor == "SNA" ~ "Southern",
+          detention_facility_aor == "SND" ~ "Southern",
+          detention_facility_aor == "SPM" ~ "Interior/Northern",
+          detention_facility_aor == "WAS" ~ "Interior/Northern"))
+
+```
+
+```{r generate_sankey}
+
+generate_sankey <- function(df_sankey, title, subtitle, stages, filter) {
   
-  df_count <- joined_df %>% 
-  count(detention_record, name="count", sort=TRUE) %>% 
-  mutate(pct = percent(count / nrow(joined_df))) %>% 
-  arrange(desc(detention_record))
+  # hide_low_counts <- function(df, col) {
+  #   df <- df %>% add_count(!!as.name(col), name="n") %>% 
+  #     mutate(other = n <= 50)
+  #   df[df$other == TRUE, col] = "Other"
+  #   df <- df %>% dplyr::select(-c(n, other))
+  #   return(df)
+  # }
   
-  print(df_count)
-  return(df_count)
+  dat <- df_sankey %>% 
+    left_join(arrest_dfs[["uq"]],
+              by = join_by("unique_identifier", stay_book_in_date_time >= apprehension_date),
+              suffix = c("", ".arrest"),
+              na_matches = 'never') %>%
+    left_join(encounter_dfs[["uq"]],
+              by = join_by("unique_identifier", apprehension_date >= event_date),
+              suffix = c("", ".encounter"),
+              na_matches = 'never') %>% 
+    rename(encounter = responsible_site,
+           arrest = apprehension_method) %>% 
+    dplyr::select(unique_identifier, detention_facility_code, placement_count, stay_count, stay_release_reason, encounter, arrest) %>% 
+    mutate(unique_identifier = paste(unique_identifier, stay_count, sep = '-'))
+  
+  dat_wide <- dat %>% 
+    pivot_wider(id_cols = c(unique_identifier, stay_release_reason, encounter, arrest), names_from = placement_count, names_prefix = "facil_", values_from = detention_facility_code)
+  
+  # dat_wide <- hide_low_counts(dat_wide, "facil_1")
+  # dat_wide <- hide_low_counts(dat_wide, "facil_2")
+  # dat_wide <- hide_low_counts(dat_wide, "facil_3")
+  # dat_wide <- hide_low_counts(dat_wide, "facil_4")
+  # dat_wide <- hide_low_counts(dat_wide, "facil_5")
+  # dat_wide <- hide_low_counts(dat_wide, "encounter")
+  # dat_wide <- hide_low_counts(dat_wide %>% mutate(arrest = as.character(arrest)), "arrest")
+  
+  flows <- dat_wide %>% 
+    dplyr::select(-c(unique_identifier, stay_release_reason)) %>% 
+    group_by_all() %>% 
+    summarize(n = n()) %>% 
+    arrange(desc(n)) %>% 
+    filter(n > filter) %>%
+    pivot_stages_longer(stages_from = stages, values_from = "n") %>% 
+    filter(!is.na(node))
+  
+  plot <- ggplot(flows,
+         aes(x = stage, y = n, group = node,
+             connector = connector, edge_id = edge_id)) +
+    geom_sankeyedge(v_space = "auto", alpha=.5, aes(fill = node)) +
+    geom_sankeynode(v_space = "auto", aes(fill=node)) +
+    labs(title = title,
+         subtitle = subtitle) +
+    guides(fill = FALSE)
+  
+  pos <- position_sankey(v_space = "auto")
+  pos_text <- position_sankey(v_space = "auto", nudge_x = 0.1)
+  
+  plot + geom_sankeyedge(aes(fill = node), position = pos) +
+    geom_sankeynode(position = pos) +
+    geom_text(aes(label = node), stat = "sankeynode", position = pos_text, hjust = 0, cex = 2) +
+    scale_x_discrete(expand = expansion(add = c(0.2, .6)))
+  
 }
+
 ```
 
-## By Arrests
-```{r}
-analyze_detention_records(arrest_dfs[["pre_trump_uq"]] %>% filter(apprehension_date >= as.Date("2024-11-20")), encounter_dfs[["pre_trump_uq"]])
-analyze_detention_records(arrest_dfs[["post_trump_uq"]], encounter_dfs[["uq"]])
+```{r detention_flow_pre_trump, fig.width=10}
+
+nwdc_detentions <- df[df$detention_facility_code == "CSCNWWA", 'unique_identifier']
+
+dat <- df %>% 
+  filter(unique_identifier %in% unlist(nwdc_detentions),
+         stay_book_in_date_time > "2024-11-01",
+         stay_book_in_date_time < "2025-01-20")
+
+generate_sankey(dat, "Detention flows thru NWIPC",
+                "Last three months Biden admin., > 5 ppl",
+                c("encounter",
+                  "arrest",
+                  "facil_1",
+                  "facil_2",
+                  "facil_3",
+                  "facil_4",
+                  "facil_5",
+                  "facil_6"),
+                5)
+
 ```
 
-## By Encounters
-```{r}
-analyze_detention_records(encounter_dfs[["pre_trump_uq"]] %>% filter(event_date >= as.Date("2024-11-20")), arrest_dfs[["pre_trump_uq"]])
-analyze_detention_records(encounter_dfs[["post_trump_uq"]], arrest_dfs[["uq"]])
+```{r detention_flow_post_trump, fig.width = 10}
+
+nwdc_detentions <- df[df$detention_facility_code == "CSCNWWA", 'unique_identifier']
+
+dat <- df %>% 
+  filter(unique_identifier %in% unlist(nwdc_detentions),
+         stay_book_in_date_time >= "2025-01-20")
+
+generate_sankey(dat, "Detention flows thru NWIPC",
+                "First three weeks Trump admin., > 5 ppl",
+                c("encounter",
+                  "arrest",
+                  "facil_1",
+                  "facil_2",
+                  "facil_3",
+                  "facil_4",
+                  "facil_5"),
+                5)
+
 ```
 
-## By Arrests (Seattle AOR)
-```{r}
-analyze_detention_records(arrest_dfs[["pre_trump_wa_uq"]] %>% filter(apprehension_date >= as.Date("2024-11-20")), encounter_dfs[["pre_trump_uq"]])
-analyze_detention_records(arrest_dfs[["post_trump_wa_uq"]], encounter_dfs[["uq"]])
+```{r detention_flow_gitmo_pre_trump, fig.width = 15}
+
+gtmo_detentions <- df[df$detention_facility_code %in% c("GTMOACU", "GTMODCU"), 'unique_identifier']
+
+dat <- df %>% 
+  filter(unique_identifier %in% unlist(gtmo_detentions),
+         stay_book_in_date_time > "2024-11-01",
+         stay_book_in_date_time < "2025-01-20")
+
+generate_sankey(dat, "Detention flows thru Gitmo",
+                "First three weeks Trump admin.",
+                c("encounter",
+                  "arrest",
+                  "facil_1",
+                  "facil_2",
+                  "facil_3",
+                  "facil_4",
+                  "facil_5",
+                  "facil_6"),
+                0)
+
 ```
 
-## By Encounters (Seattle AOR)
-```{r}
-analyze_detention_records(encounter_dfs[["pre_trump_wa_uq"]] %>% filter(event_date >= as.Date("2024-11-20")), arrest_dfs[["pre_trump_uq"]])
-analyze_detention_records(encounter_dfs[["post_trump_wa_uq"]], arrest_dfs[["uq"]])
+```{r detention_flow_gitmo_post_trump, fig.width = 15}
+
+gtmo_detentions <- df[df$detention_facility_code %in% c("GTMOACU", "GTMODCU"), 'unique_identifier']
+
+dat <- df %>% 
+  filter(unique_identifier %in% unlist(gtmo_detentions),
+         stay_book_in_date_time >= "2025-01-20")
+
+generate_sankey(dat, "Detention flows thru Gitmo",
+                "First three weeks Trump admin.",
+                c("encounter",
+                  "arrest",
+                  "facil_1",
+                  "facil_2",
+                  "facil_3",
+                  "facil_4",
+                  "facil_5",
+                  "facil_6",
+                  "facil_7",
+                  "facil_8",
+                  "facil_9",
+                  "facil_10"),
+                0)
+
 ```
 
-```{r}
-# Average time difference between book in date time and apprehension date
-detention_arrest_df <- arrest_dfs[["uq"]] %>% 
-  inner_join(detention_dfs[["uq"]],
-       by="unique_identifier",
-       na_matches='never') %>% 
-  mutate(date_diff = difftime(book_in_date_time, apprehension_date, units='days'))
+```{r detention_flow_wa_pre_trump, fig.width = 10}
 
-print(mean(detention_arrest_df$date_diff))
+wa_detentions <- df[df$detention_facility_state == "WA", 'unique_identifier']
+
+dat <- df %>% 
+  filter(unique_identifier %in% unlist(wa_detentions),
+         stay_book_in_date_time > "2024-11-01",
+         stay_book_in_date_time < "2025-01-20")
+
+generate_sankey(dat, "Detention flows thru WA",
+                "Last three months Biden admin., > 5 ppl",
+                c("encounter",
+                  "arrest",
+                  "facil_1",
+                  "facil_2",
+                  "facil_3",
+                  "facil_4",
+                  "facil_5",
+                  "facil_6",
+                  "facil_7",
+                  "facil_8",
+                  "facil_9"),
+                5)
+
+```
+
+```{r detention_flow_wa_post_trump, fig.width = 10}
+
+wa_detentions <- df[df$detention_facility_state == "WA", 'unique_identifier']
+
+dat <- df %>% 
+  filter(unique_identifier %in% unlist(wa_detentions),
+         stay_book_in_date_time >= "2025-01-20")
+
+generate_sankey(dat, "Detention flows thru WA",
+                "First three weeks Trump admin., > 5 ppl",
+                c("encounter",
+                  "arrest",
+                  "facil_1",
+                  "facil_2",
+                  "facil_3",
+                  "facil_4",
+                  "facil_5"),
+                5)
+
 ```
