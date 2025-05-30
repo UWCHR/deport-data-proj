@@ -267,7 +267,7 @@ df <- df %>%
 
 ```{r generate_sankey}
 
-generate_sankey <- function(df_sankey, title, subtitle, stages, filter) {
+generate_sankey <- function(df_sankey, title, subtitle, stages, filter = 5, outcome = FALSE) {
   
   # hide_low_counts <- function(df, col) {
   #   df <- df %>% add_count(!!as.name(col), name="n") %>% 
@@ -285,7 +285,7 @@ generate_sankey <- function(df_sankey, title, subtitle, stages, filter) {
     left_join(encounter_dfs[["uq"]],
               by = join_by("unique_identifier", apprehension_date >= event_date),
               suffix = c("", ".encounter"),
-              na_matches = 'never') %>% 
+              na_matches='never') %>% 
     rename(encounter = responsible_site,
            arrest = apprehension_method) %>% 
     dplyr::select(unique_identifier, detention_facility_code, placement_count, stay_count, stay_release_reason, encounter, arrest) %>% 
@@ -302,16 +302,27 @@ generate_sankey <- function(df_sankey, title, subtitle, stages, filter) {
   # dat_wide <- hide_low_counts(dat_wide, "encounter")
   # dat_wide <- hide_low_counts(dat_wide %>% mutate(arrest = as.character(arrest)), "arrest")
   
-  flows <- dat_wide %>% 
-    dplyr::select(-c(unique_identifier, stay_release_reason)) %>% 
-    group_by_all() %>% 
-    summarize(n = n()) %>% 
-    arrange(desc(n)) %>% 
+  if (outcome) {
+    flows <- dat_wide %>%
+      dplyr::select(-c(unique_identifier)) %>%
+      group_by_all() %>%
+      summarize(n = n()) %>%
+      arrange(desc(n))
+    stages <- append(stages, "stay_release_reason")
+  } else {
+    flows <- dat_wide %>%
+      dplyr::select(-c(unique_identifier, stay_release_reason)) %>%
+      group_by_all() %>%
+      summarize(n = n()) %>%
+      arrange(desc(n))
+  }
+  
+  flows_long <- flows %>% 
     filter(n > filter) %>%
     pivot_stages_longer(stages_from = stages, values_from = "n") %>% 
     filter(!is.na(node))
   
-  plot <- ggplot(flows,
+  plot <- ggplot(flows_long,
          aes(x = stage, y = n, group = node,
              connector = connector, edge_id = edge_id)) +
     geom_sankeyedge(v_space = "auto", alpha=.5, aes(fill = node)) +
@@ -350,8 +361,7 @@ generate_sankey(dat, "Detention flows thru NWIPC",
                   "facil_3",
                   "facil_4",
                   "facil_5",
-                  "facil_6"),
-                5)
+                  "facil_6"))
 
 ```
 
@@ -386,7 +396,7 @@ dat <- df %>%
          stay_book_in_date_time < "2025-01-20")
 
 generate_sankey(dat, "Detention flows thru Gitmo",
-                "First three weeks Trump admin.",
+                "Last three months Biden admin.",
                 c("encounter",
                   "arrest",
                   "facil_1",
@@ -395,7 +405,7 @@ generate_sankey(dat, "Detention flows thru Gitmo",
                   "facil_4",
                   "facil_5",
                   "facil_6"),
-                0)
+                filter = 0)
 
 ```
 
