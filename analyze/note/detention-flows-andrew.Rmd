@@ -1,0 +1,379 @@
+---
+title: "Detention Flows Graphical Analysis"
+author: "UWCHR"
+date: "2025-06-07"
+output:
+    html_document:
+        html_preview: true
+        toc: true
+        toc_depth: 3
+        toc_float: true
+        code_folding: hide
+---
+
+# Setup
+```{r setup, message=FALSE, warning=FALSE, include=TRUE}
+
+options(scipen = 1000000)
+
+library(pacman)
+
+p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, ggVennDiagram, digest, ggsankeyfier)
+
+```
+
+```{r setup_facilities, message=FALSE, warning=FALSE, include=TRUE}
+
+# Running into problem with .gz version of facilities dataset
+file <- "facilities.csv"
+
+facilities_df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
+  janitor::clean_names()
+
+```
+
+```{r setup_detainers, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "ERO_Detainers_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
+
+detainer_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
+  janitor::clean_names() %>% 
+  mutate(date_diff = difftime(detainer_prepare_date, apprehension_date, units='days'),
+         pre_trump = detainer_prepare_date < as.Date("2025-01-20"))
+
+detainer_ids <- unique(detainer_df$unique_identifier)
+
+```
+
+```{r setup_encounters, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "ERO_Encounters_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
+
+encounter_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
+  janitor::clean_names() %>% 
+  mutate(event_date = as.Date(event_date),
+         pre_trump = event_date < as.Date("2025-01-20"))
+
+encounter_df_uq <- encounter_df %>%
+  arrange(desc(event_date)) %>%
+  distinct(unique_identifier, .keep_all=TRUE)
+
+encounter_ids <- unique(encounter_df$unique_identifier)
+
+```
+
+```{r setup_arrests, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "ERO_Admin_Arrests_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
+
+arrest_df<- read_excel(here('analyze', 'input', file), skip=6) %>% 
+  janitor::clean_names() %>% 
+  mutate(apprehension_date = as.Date(apprehension_date),
+         apprehension_method = fct(apprehension_method),
+         criminality = apprehension_criminality == "1 Convicted Criminal",
+         n_dupe = row_number(), .by = c("apprehension_date", "apprehension_method", "apprehension_criminality", "unique_identifier"),
+         pre_trump = apprehension_date < as.Date("2025-01-20")) %>% 
+  filter(is.na(unique_identifier) | n_dupe == 1)
+
+arrest_df_uq <- arrest_df %>%
+  arrange(desc(apprehension_date)) %>%
+  distinct(unique_identifier, .keep_all=TRUE)
+
+arrest_ids <- unique(arrest_df$unique_identifier)
+
+```
+
+```{r setup_detentions, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "ice_detentions_nov23-feb25.csv.gz"
+
+detain_unique_stays_df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
+  janitor::clean_names() %>% 
+  mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
+         book_in_date_time = ymd_hms(book_in_date_time),
+         detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
+         stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
+         pre_trump = stay_book_in_date_time < as.Date("2025-01-20")) %>% 
+  left_join(facilities_df, by=c("detention_facility_code" = "detloc"))
+
+```
+
+# Sankey Diagrams
+```{r}
+
+df <- detain_unique_stays_df %>% 
+  mutate(known_facil = detention_facility_code %in% unique(facilities_df$detloc)) %>% 
+  rename(detention_facility_aor = aor,
+         detention_facility_state = state,
+         detention_facility_circuit = circuit,
+         detention_facility_over_72 = over_72,
+         detention_facility_type = type)
+
+unknown_facil <- unique(df[df$known_facil == FALSE, c("detention_facility_code", "detention_facility")]) %>% 
+  arrange(detention_facility)
+
+detloc_aor <- facilities_df %>% 
+  rename(detention_facility_code = detloc,
+         area_of_responsibility = aor) %>% 
+  distinct(detention_facility_code, area_of_responsibility) %>% 
+  arrange(detention_facility_code, area_of_responsibility)
+
+detloc_aor_list <- as.list(detloc_aor$detention_facility_code)
+
+names(detloc_aor_list) <- detloc_aor$area_of_responsibility
+
+df$first_aor <- names(detloc_aor_list)[match(df$first_facil, detloc_aor_list)]
+df$last_aor <- names(detloc_aor_list)[match(df$last_facil, detloc_aor_list)]
+df$prev_aor <- names(detloc_aor_list)[match(df$prev_facil, detloc_aor_list)]
+df$longest_aor <- names(detloc_aor_list)[match(df$longest_placement_facil, detloc_aor_list)]
+
+df <- df %>% 
+  mutate(detention_facility_region = case_when(detention_facility_aor == "ATL" ~ "Interior/Northern",
+          detention_facility_aor == "BAL" ~ "Interior/Northern",
+          detention_facility_aor == "BOS" ~ "Interior/Northern",
+          detention_facility_aor == "BUF" ~ "Interior/Northern",
+          detention_facility_aor == "CHI" ~ "Interior/Northern",
+          detention_facility_aor == "DAL" ~ "Interior/Northern",
+          detention_facility_aor == "DEN" ~ "Interior/Northern",
+          detention_facility_aor == "DET" ~ "Interior/Northern",
+          detention_facility_aor == "ELP" ~ "Southern",
+          detention_facility_aor == "HOU" ~ "Southern",
+          detention_facility_aor == "LOS" ~ "Interior/Northern",
+          detention_facility_aor == "MIA" ~ "Interior/Northern",
+          detention_facility_aor == "NEW" ~ "Interior/Northern",
+          detention_facility_aor == "NOL" ~ "Interior/Northern",
+          detention_facility_aor == "NYC" ~ "Interior/Northern",
+          detention_facility_aor == "PHI" ~ "Interior/Northern",
+          detention_facility_aor == "PHO" ~ "Southern",
+          detention_facility_aor == "SEA" ~ "Interior/Northern",
+          detention_facility_aor == "SFR" ~ "Interior/Northern",
+          detention_facility_aor == "SLC" ~ "Interior/Northern",
+          detention_facility_aor == "SNA" ~ "Southern",
+          detention_facility_aor == "SND" ~ "Southern",
+          detention_facility_aor == "SPM" ~ "Interior/Northern",
+          detention_facility_aor == "WAS" ~ "Interior/Northern"))
+
+```
+
+```{r generate_sankey}
+
+generate_sankey <- function(df_sankey, title, subtitle, stages, filter = 5, outcome = FALSE, vspace = "auto") {
+  dat <- df_sankey %>% 
+    left_join(arrest_df_uq,
+              by = join_by("unique_identifier", stay_book_in_date_time >= apprehension_date),
+              suffix = c("", ".arrest"),
+              na_matches = 'never') %>%
+    left_join(encounter_df_uq,
+              by = join_by("unique_identifier", apprehension_date >= event_date),
+              suffix = c("", ".encounter"),
+              na_matches='never') %>% 
+    rename(encounter = responsible_site,
+           arrest = apprehension_method,
+           outcome = stay_release_reason) %>% 
+    select(unique_identifier, detention_facility_code, placement_count, stay_count, outcome, encounter, arrest) %>% 
+    mutate(unique_identifier = paste(unique_identifier, stay_count, sep = '-'))
+  
+  dat_wide <- dat %>% 
+    pivot_wider(id_cols = c(unique_identifier, encounter, arrest, outcome),
+                names_from = placement_count,
+                names_prefix = "facil_",
+                values_from = detention_facility_code)
+  
+  if (outcome) {
+    flows <- dat_wide %>%
+      select(-c(unique_identifier))
+    # Append outcome here so that outcome nodes and stages are included in factor levels for flows_long
+    stages <- append(stages, "outcome")
+  } else {
+    flows <- dat_wide %>%
+      select(-c(unique_identifier, outcome))
+  }
+  
+  flows <- flows %>%
+    group_by_all() %>%
+    summarize(n = n()) %>%
+    filter(n > filter) %>%
+    ungroup()
+  
+  flows_long <- flows %>% 
+    filter(n > filter) %>%
+    pivot_stages_longer(stages_from = stages, values_from = "n")
+  
+  if (outcome && sum(!is.na(flows$outcome)) > 0) {
+    # Get last stage that's not NA
+    flows_outcome <- flows %>% 
+      mutate(id = row_number()) %>% 
+      pivot_longer(-c(id, outcome, n), names_to = "stage", values_to = "node") %>% 
+      filter(!is.na(node)) %>% 
+      group_by(id) %>% 
+      summarize(across(everything(), last)) %>% 
+      ungroup()
+    
+    # Sum up counts
+    flows_outcome <- flows_outcome %>% 
+      group_by(outcome, node, stage) %>% 
+      summarize(n = sum(n)) %>% 
+      ungroup() %>% 
+      mutate(edge_id = row_number() + max(flows_long$edge_id)) 
+    
+    # Subtract counts from nodes in flow_long
+    full_edges <- flows_long %>% 
+      left_join(flows_long,
+                by = c("edge_id", "n"),
+                suffix = c(".from", ".to")) %>% 
+      filter(connector.from == "from",
+             connector.to == "to")
+    
+    for (r in 1:nrow(flows_outcome)) {
+      node_from <- flows_outcome[[r, "node"]]
+      stage_from <- flows_outcome[[r, "stage"]]
+      n <- flows_outcome[[r, "n"]]
+      
+      old_edge_id <- full_edges[[which(full_edges$node.from == node_from &
+                                         full_edges$stage.from == stage_from &
+                                         is.na(full_edges$node.to))[1],
+                                 "edge_id"]]
+      i <- which(flows_long$edge_id == old_edge_id)
+      old_n <- flows_long[[i[1], "n"]]
+      flows_long[i, "n"] <- old_n - n
+    }
+    
+    # Remove old outcome edges
+    outcome_edge_ids <- flows_long %>%
+      filter(stage == "outcome") %>%
+      select(edge_id)
+    flows_long <- flows_long %>%
+      filter(!(edge_id %in% unlist(outcome_edge_ids)))
+    
+    # Append new outcome edges
+    from_edges_outcome <- flows_outcome %>% 
+      select(-c(outcome)) %>% 
+      mutate(connector = "from")
+    
+    to_edges_outcome <- flows_outcome %>% 
+      select(-c(node, stage)) %>% 
+      rename(node = outcome) %>% 
+      mutate(stage = "outcome",
+             connector = "to")
+    
+    flows_long <- rbind(flows_long, from_edges_outcome, to_edges_outcome)
+  }
+  
+  flows_long <- flows_long %>% filter(!is.na(node))
+  
+  pos <- position_sankey(v_space = vspace)
+  pos_text <- position_sankey(v_space = vspace, nudge_x = 0.1)
+  
+  ggplot(flows_long, aes(x = stage, y = n, group = node, connector = connector, edge_id = edge_id)) +
+    geom_sankeyedge(aes(fill = node), position = pos) +
+    geom_sankeynode(position = pos) +
+    geom_text(aes(label = node), stat = "sankeynode", position = pos_text, hjust = 0, cex = 2) +
+    scale_x_discrete(expand = expansion(add = c(0.2, .6))) +
+    labs(title = title, subtitle = subtitle) +
+    guides(fill = FALSE)
+}
+
+```
+
+```{r detention_flow_pre_trump, fig.width=15}
+
+nwdc_detentions <- df[df$detention_facility_code == "CSCNWWA", "unique_identifier"]
+stages <- c("encounter", "arrest", "facil_1", "facil_2", "facil_3", "facil_4", "facil_5", "facil_6", "facil_7", "facil_8", "facil_9")
+
+dat <- df %>% 
+  filter(unique_identifier %in% unlist(nwdc_detentions),
+         stay_book_in_date_time > "2024-11-01",
+         stay_book_in_date_time < "2025-01-20")
+
+generate_sankey(dat, "Detention flows thru NWIPC",
+                "Last three months Biden admin., > 5 ppl",
+                stages,
+                outcome=TRUE,
+                vspace = 10)  # When outcome = TRUE, vspace should be set manually for best visual results
+
+```
+
+```{r detention_flow_post_trump, fig.width = 10}
+
+nwdc_detentions <- df[df$detention_facility_code == "CSCNWWA", "unique_identifier"]
+stages <- c("encounter", "arrest", "facil_1", "facil_2", "facil_3", "facil_4", "facil_5")
+
+dat <- df %>% 
+  filter(unique_identifier %in% unlist(nwdc_detentions),
+         stay_book_in_date_time >= "2025-01-20")
+
+generate_sankey(dat, "Detention flows thru NWIPC",
+                "First three weeks Trump admin., > 5 ppl",
+                stages,
+                outcome = TRUE)
+
+```
+
+```{r detention_flow_gitmo_pre_trump, fig.width = 15}
+
+gtmo_detentions <- df[df$detention_facility_code %in% c("GTMOACU", "GTMODCU"), "unique_identifier"]
+stages <- c("encounter", "arrest", "facil_1", "facil_2", "facil_3", "facil_4", "facil_5", "facil_6")
+
+dat <- df %>% 
+  filter(unique_identifier %in% unlist(gtmo_detentions),
+         stay_book_in_date_time > "2024-11-01",
+         stay_book_in_date_time < "2025-01-20")
+
+generate_sankey(dat, "Detention flows thru Gitmo",
+                "Last three months Biden admin.",
+                stages,
+                filter = 1,
+                outcome = TRUE)
+
+```
+
+```{r detention_flow_gitmo_post_trump, fig.width = 15}
+
+gtmo_detentions <- df[df$detention_facility_code %in% c("GTMOACU", "GTMODCU"), "unique_identifier"]
+stages <- c("encounter", "arrest", "facil_1", "facil_2", "facil_3", "facil_4", "facil_5", "facil_6", "facil_7", "facil_8", "facil_9", "facil_10")
+
+dat <- df %>% 
+  filter(unique_identifier %in% unlist(gtmo_detentions),
+         stay_book_in_date_time >= "2025-01-20")
+
+generate_sankey(dat, "Detention flows thru Gitmo",
+                "First three weeks Trump admin.",
+                stages,
+                filter = 1,
+                outcome = TRUE)
+
+```
+
+```{r detention_flow_wa_pre_trump, fig.width = 15}
+
+wa_detentions <- df[df$detention_facility_state == "WA", "unique_identifier"]
+stages <- c("encounter", "arrest", "facil_1", "facil_2", "facil_3", "facil_4", "facil_5", "facil_6", "facil_7", "facil_8", "facil_9")
+
+dat <- df %>% 
+  filter(unique_identifier %in% unlist(wa_detentions),
+         stay_book_in_date_time > "2024-11-01",
+         stay_book_in_date_time < "2025-01-20")
+
+generate_sankey(dat, "Detention flows thru WA",
+                "Last three months Biden admin., > 5 ppl",
+                stages,
+                outcome = TRUE,
+                vspace = 10)
+
+```
+
+```{r detention_flow_wa_post_trump, fig.width = 10}
+
+wa_detentions <- df[df$detention_facility_state == "WA", "unique_identifier"]
+stages <- c("encounter", "arrest", "facil_1", "facil_2", "facil_3", "facil_4", "facil_5")
+
+dat <- df %>% 
+  filter(unique_identifier %in% unlist(wa_detentions),
+         stay_book_in_date_time >= "2025-01-20")
+
+generate_sankey(dat, "Detention flows thru WA",
+                "First three weeks Trump admin., > 5 ppl",
+                stages,
+                outcome = TRUE)
+
+```
