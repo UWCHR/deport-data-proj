@@ -1,7 +1,7 @@
 ---
-title: "Analysis of Detainers of Interest"
+title: "Non-Detained Docket Control/Non-Custodial Arrest Pathway Analysis"
 author: "UWCHR"
-date: "2025-03-31"
+date: "2025-06-07"
 output:
     html_document:
         html_preview: true
@@ -11,23 +11,28 @@ output:
         code_folding: hide
 ---
 
-# Setup
 ```{r setup, message=FALSE, warning=FALSE, include=TRUE}
+
 options(scipen = 1000000)
 
 library(pacman)
 
 p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, ggVennDiagram)
+
 ```
 
 ```{r setup_facilities, message=FALSE, warning=FALSE, include=TRUE}
+
+# Running into problem with .gz version of facilities dataset
 file <- "facilities.csv"
 
 facilities_df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
   janitor::clean_names()
+
 ```
 
 ```{r setup_detainers, message=FALSE, warning=FALSE, include=TRUE}
+
 file <- "ERO_Detainers_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
 
 detainer_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
@@ -36,9 +41,11 @@ detainer_df <- read_excel(here('analyze', 'input', file), skip=6) %>%
          pre_trump = detainer_prepare_date < as.Date("2025-01-20"))
 
 detainer_ids <- unique(detainer_df$unique_identifier)
+
 ```
 
 ```{r setup_encounters, message=FALSE, warning=FALSE, include=TRUE}
+
 file <- "ERO_Encounters_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
 
 encounter_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
@@ -47,9 +54,11 @@ encounter_df <- read_excel(here('analyze', 'input', file), skip=6) %>%
          pre_trump = event_date < as.Date("2025-01-20"))
 
 encounter_ids <- unique(encounter_df$unique_identifier)
+
 ```
 
 ```{r setup_arrests, message=FALSE, warning=FALSE, include=TRUE}
+
 file <- "ERO_Admin_Arrests_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
 
 arrest_df<- read_excel(here('analyze', 'input', file), skip=6) %>% 
@@ -62,38 +71,33 @@ arrest_df<- read_excel(here('analyze', 'input', file), skip=6) %>%
   filter(is.na(unique_identifier) | n_dupe == 1)
 
 arrest_ids <- unique(arrest_df$unique_identifier)
+
 ```
 
-```{r setup_detention, message=FALSE, warning=FALSE, include=TRUE}
-file <- "ICE_Detentions_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
+```{r setup_detentions, message=FALSE, warning=FALSE, include=TRUE}
 
-detention_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
+file <- "ice_detentions_nov23-feb25.csv.gz"
+
+detain_unique_stays_df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
   janitor::clean_names() %>% 
-  mutate(stay_book_in_date_time = as.Date(stay_book_in_date_time, format = "%m/%d/%Y %H:%M"),
-         book_in_date_time = as.Date(book_in_date_time, format = "%m/%d/%Y %H:%M"),
-         stay_book_out_date_time = as.Date(stay_book_out_date_time, format = "%m/%d/%Y %H:%M"),
-         stay_book_in_date_time = as.Date(stay_book_out_date, format = "%m/%d/%Y %H:%M"),
-         book_in_fy = substr(quarter(book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4),
-         stay_book_in_fy = substr(quarter(stay_book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4),
-         pre_trump = book_in_date_time < as.Date("2025-01-20")) %>% 
+  mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
+         book_in_date_time = ymd_hms(book_in_date_time),
+         detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
+         stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
+         pre_trump = stay_book_in_date_time < as.Date("2025-01-20")) %>% 
   left_join(facilities_df, by=c("detention_facility_code" = "detloc"))
 
-detention_ids <- unique(detention_df$unique_identifier)
 ```
 
 ```{r}
 # Break down datasets by geography and pre vs. post Trump
-segment_df <- function(df, arrange, geo_filter) {
-  distinct_id <- function(df) {
-    return (arrange(df) %>% distinct(unique_identifier, .keep_all=TRUE))
-  }
-  
-  df_uq <- distinct_id(df)
-  df_wa_uq <- distinct_id(geo_filter(df))
-  df_pre_trump_uq <- distinct_id(filter(df, pre_trump == TRUE))
-  df_post_trump_uq <- distinct_id(filter(df, pre_trump == FALSE))
-  df_pre_trump_wa_uq <- distinct_id(geo_filter(filter(df, pre_trump == TRUE)))
-  df_post_trump_wa_uq <- distinct_id(geo_filter(filter(df, pre_trump == FALSE)))
+segment_df <- function(df, unique_fn, geo_filter) {
+  df_uq <- unique_fn(df)
+  df_wa_uq <- unique_fn(geo_filter(df))
+  df_pre_trump_uq <- unique_fn(filter(df, pre_trump == TRUE))
+  df_post_trump_uq <- unique_fn(filter(df, pre_trump == FALSE))
+  df_pre_trump_wa_uq <- unique_fn(geo_filter(filter(df, pre_trump == TRUE)))
+  df_post_trump_wa_uq <- unique_fn(geo_filter(filter(df, pre_trump == FALSE)))
   
   return (list("uq"=df_uq,
             "wa_uq"=df_wa_uq,
@@ -103,17 +107,17 @@ segment_df <- function(df, arrange, geo_filter) {
             "post_trump_wa_uq"=df_post_trump_wa_uq))
 }
 
-detention_dfs <- segment_df(detention_df,
-                            (function(df) return(arrange(df, desc(book_in_date_time)))),
-                            (function(df) return(filter(df, state == "WA"))))
+detention_dfs <- segment_df(detain_unique_stays_df,
+                           (function(df) return(df %>% filter(last_placement == TRUE))),
+                           (function(df) return(df %>% filter(state == "WA"))))
 
 encounter_dfs <- segment_df(encounter_df,
-                                    (function(df) return(arrange(df, desc(event_date)))),
-                                    (function(df) return(filter(df, responsible_aor == "Seattle Area of Responsibility"))))
+                           (function(df) return(df %>% arrange(desc(event_date)) %>% distinct(unique_identifier, .keep_all=TRUE))),
+                           (function(df) return(df %>% filter(responsible_aor == "Seattle Area of Responsibility"))))
 
 arrest_dfs <- segment_df(arrest_df,
-                                  (function(df) return(arrange(df, desc(apprehension_date)))),
-                                  (function(df) return(filter(df, apprehension_aor == "Seattle Area of Responsibility"))))
+                        (function(df) return(df %>% arrange(desc(apprehension_date)) %>% distinct(unique_identifier, .keep_all=TRUE))),
+                        (function(df) return(df %>% filter(apprehension_aor == "Seattle Area of Responsibility"))))
 ```
 
 
@@ -123,64 +127,6 @@ percent <- function(x, digits = 2, format = "f", ...) {
   paste0(formatC(100 * x, format = format, digits = digits, ...), "%")
 }
 ```
-
-
-## Enforcement Pathways
-This section attempts to analyze various "enforcement pathways" in the Pacific Northwest by joining data across encounter, arrest, and detention datasets. The following subsections analyze enforcement pathways for detentions in Washington, arrests in Seattle AOR, and encounters in Seattle AOR.
-
-
-```{r}
-summarize_pathways <- function(df1, df2, df3, name1, name2, name3) {
-  joined_df <- df1 %>% 
-    left_join(df2,
-            by="unique_identifier",
-            suffix=c(paste(".", name1, sep=""), paste(".", name2, sep="")),
-            na_matches='never') %>% 
-    left_join(df3,
-              by="unique_identifier",
-              suffix=c("", paste(".", name3, sep="")),
-              na_matches='never')
-  
-  joined_df_count_geo <- joined_df %>% 
-    count(responsible_site, detention_facility_code, name="count", sort=TRUE) %>% 
-    mutate(pct = percent(count / nrow(joined_df)))
-  print(joined_df_count_geo)
-  
-  joined_df_count_method <- joined_df %>% 
-    count(event_type, apprehension_method, name="count", sort=TRUE) %>% 
-    mutate(pct = percent(count / nrow(joined_df)))
-  print(joined_df_count_method)
-  
-  print(paste("Num Records: ", nrow(joined_df), ""))
-}
-```
-
-## WA Detentions: Pre-Trump vs. Post-Trump
-```{r}
-summarize_pathways(detention_dfs[["pre_trump_wa_uq"]], encounter_dfs[["uq"]], arrest_dfs[["uq"]],
-                   "detention", "encounter", "arrest")
-summarize_pathways(detention_dfs[["post_trump_wa_uq"]], encounter_dfs[["uq"]], arrest_dfs[["uq"]],
-                   "detention", "encounter", "arrest")
-```
-
-## Seattle AOR Arrests: Pre-Trump vs. Post-Trump
-```{r}
-summarize_pathways(arrest_dfs[["pre_trump_wa_uq"]], encounter_dfs[["uq"]], detention_dfs[["uq"]],
-                   "arrest", "encounter", "detention")
-summarize_pathways(arrest_dfs[["post_trump_wa_uq"]], encounter_dfs[["uq"]], detention_dfs[["uq"]],
-                   "arrest", "encounter", "detention")
-```
-
-## Seattle AOR Encounters: Pre-Trump vs. Post-Trump
-```{r}
-summarize_pathways(encounter_dfs[["pre_trump_wa_uq"]], arrest_dfs[["uq"]], detention_dfs[["uq"]],
-                   "encounter", "arrest", "detention")
-summarize_pathways(encounter_dfs[["post_trump_wa_uq"]], arrest_dfs[["uq"]], detention_dfs[["uq"]],
-                   "encounter", "arrest", "detention")
-```
-
-
-# Detention Analysis
 
 How many records of people going from "non-detained docket control" to "non-custodial arrest" also have detention records pre vs. post Trump?
 
@@ -204,31 +150,33 @@ analyze_detention_records <- function(df1, df2) {
 }
 ```
 
-## By Arrests
+# By Arrests
 ```{r}
 analyze_detention_records(arrest_dfs[["pre_trump_uq"]] %>% filter(apprehension_date >= as.Date("2024-11-20")), encounter_dfs[["pre_trump_uq"]])
 analyze_detention_records(arrest_dfs[["post_trump_uq"]], encounter_dfs[["uq"]])
 ```
 
-## By Encounters
+# By Encounters
 ```{r}
 analyze_detention_records(encounter_dfs[["pre_trump_uq"]] %>% filter(event_date >= as.Date("2024-11-20")), arrest_dfs[["pre_trump_uq"]])
 analyze_detention_records(encounter_dfs[["post_trump_uq"]], arrest_dfs[["uq"]])
 ```
 
-## By Arrests (Seattle AOR)
+# By Arrests (Seattle AOR)
 ```{r}
 analyze_detention_records(arrest_dfs[["pre_trump_wa_uq"]] %>% filter(apprehension_date >= as.Date("2024-11-20")), encounter_dfs[["pre_trump_uq"]])
 analyze_detention_records(arrest_dfs[["post_trump_wa_uq"]], encounter_dfs[["uq"]])
 ```
 
-## By Encounters (Seattle AOR)
+# By Encounters (Seattle AOR)
 ```{r}
 analyze_detention_records(encounter_dfs[["pre_trump_wa_uq"]] %>% filter(event_date >= as.Date("2024-11-20")), arrest_dfs[["pre_trump_uq"]])
 analyze_detention_records(encounter_dfs[["post_trump_wa_uq"]], arrest_dfs[["uq"]])
 ```
 
+# Mean Detainer-Arrest Lag
 ```{r}
+# Average time difference between book in date time and apprehension date
 detention_arrest_df <- arrest_dfs[["uq"]] %>% 
   inner_join(detention_dfs[["uq"]],
        by="unique_identifier",
@@ -237,3 +185,4 @@ detention_arrest_df <- arrest_dfs[["uq"]] %>%
 
 print(mean(detention_arrest_df$date_diff))
 ```
+
