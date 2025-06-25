@@ -1,0 +1,373 @@
+---
+title: "ICE ERO-LESA data Nov. 2023-Feb. 2025, Guantanamo detentions"
+author: "UWCHR"
+date: "2025-03-25"
+output:
+    html_document:
+        html_preview: true
+        toc: true
+        toc_depth: 3
+        toc_float: true
+        code_folding: hide
+---
+
+This notebook analyzes ICE enforcement data associated with detentions at Guantanamo Bay, Cuba. Datasets were obtained by the Deportation Data Project.
+
+```{r setup, message=FALSE, warning=FALSE, include=TRUE}
+
+options(scipen = 1000000)
+
+library(pacman)
+
+p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, digest, ggsankeyfier)
+
+file <- "ice_detentions_nov23-jun25.csv.gz"
+
+df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
+  janitor::clean_names() %>% 
+  mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
+         book_in_date_time = ymd_hms(book_in_date_time),
+         detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
+         stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
+         )
+
+gitmo_codes <- c("GTMOACU", "GTMODCU")
+
+# Get all placements at Guantanamo Bay detention facilities
+gitmo_detentions <- df[df$detention_facility_code %in% c("GTMOACU", "GTMODCU"),]
+
+# Confirm one record per individual unique identifier
+# stopifnot(nrow(gitmo_detentions) == length(unique(gitmo_detentions$unique_identifier)))
+
+# Get all detention history records for individuals transferred to Guantanamo Bay
+gitmo_detention_stays <- df[df$stayid %in% unique(gitmo_detentions$stayid),]
+
+# Get all detention history records for individuals transferred to Guantanamo Bay
+gitmo_detention_histories <- df[df$unique_identifier %in% unique(gitmo_detentions$unique_identifier),]
+
+```
+
+ICE detention data includes `r nrow(df)` records of detention placements involving `r length(unique(df$unique_identifier))` unique individuals, identified by the field `df$unique_identifier`.
+
+ICE detention data represents records of detention transfers or book-outs from `r min(df$detention_book_out_date_time, na.rm=TRUE)` to `r max(df$detention_book_out_date_time, na.rm=TRUE)`; therefore, some individual detention histories may be incomplete.
+
+The dataset includes `r nrow(gitmo_detentions)` records associated with transfers to two detention locations at Guantanamo Bay, Cuba: `detention_facility_code` values  "GTMOACU" and "GTMODCU", identified as `r unique(df[df$detention_facility_code == gitmo_codes[1], "detention_facility"])` and `r unique(df[df$detention_facility_code == gitmo_codes[2], "detention_facility"])`, respectively. These detention facilities do not appear in prior detention history datasets consulted by UWCHR.
+
+In this case, each transfer to Guantanamo Bay is associated with a single individual as indicated by the `unique_identifier` field. By filtering the dataset for all records with matching `unique_identifier` values, we find a total of `r nrow(gitmo_detention_histories)` detention history records associated with individuals transferred to Guantanamo Bay
+
+At the time of production of the dataset, `r sum(is.na(gitmo_detentions$stay_release_reason))` placements at Guantanamo Bay facilities were ongoing, as indicated by empty `stay_release_reason` field; `r sum(!is.na(gitmo_detentions$stay_release_reason))` placement at Guantanamo Bay was complete, with `stay_release_reason` indicating `r gitmo_detentions[!is.na(gitmo_detentions$stay_release_reason), 'stay_release_reason']`.
+
+## Transfers to Guantanamo Bay
+
+```{r gitmo_transfers}
+
+transfer_dates <- gitmo_detentions %>% 
+  mutate(book_in_date = date(book_in_date_time)) %>% 
+  count(book_in_date)
+
+transfer_sites <- gitmo_detentions %>% 
+  mutate(book_in_date = date(book_in_date_time)) %>% 
+  count(book_in_date, detention_facility)
+
+transfer_sites_sum <- transfer_sites %>%
+  group_by(detention_facility) %>%
+  summarize(n = sum(n))
+
+transfers_from <- gitmo_detentions %>% 
+  mutate(book_in_date = date(book_in_date_time)) %>% 
+  count(book_in_date, prev_facil)
+
+```
+
+The data record tranfers to Guantanamo Bay on `r nrow(transfer_dates)` days from `r min(transfer_dates$book_in_date)` to `r max(transfer_dates$book_in_date)`, with each transfers involving `r min(transfer_dates$n)` to `r max(transfer_dates$n)` people. It is not clear how these transfer dates compare with those documented via other reports.
+
+Detained people transferred to Guantanamo Bay were associated with two different detention sites, with a total of `r transfer_sites_sum[transfer_sites_sum$detention_facility == "JTF CAMP SIX", "n"]` transfers to "JTF CAMP SIX" and `r transfer_sites_sum[transfer_sites_sum$detention_facility == "MIGRANT OPS CENTER MAIN AV622", "n"]` to "MIGRANT OPS CENTER MAIN AV622". It is not immediately apparent what is indicated by this distinction.
+
+```{r plot_transfers}
+
+p1 <- gitmo_detentions %>% 
+  mutate(transfer_date = date(book_in_date_time)) %>% 
+  count(transfer_date, detention_facility) %>% 
+  ggplot(aes(x = transfer_date, y = n, fill = detention_facility)) +
+  geom_col()
+
+p1
+
+```
+
+## Characteristics of detained people transferred to Guantanamo Bay
+
+```{r indiv_characteristics}
+
+gitmo_ind <- gitmo_detentions %>% 
+  distinct(unique_identifier, .keep_all = TRUE)
+
+stopifnot(sum(gitmo_ind$gender == "Male") == nrow(gitmo_ind))
+
+```
+
+Recent detention history data includes a limited number of fields involving individual characteristics of detained people. (Note that in this case, each transfer to Guantanamo Bay involves a single person and there are no repeat transfers, so we could naively process the subset of transfer records to represent individual characteristics; for the sake of clarity, we generate a separate subset of records per distinct `unique_identifier` for this section.)
+
+```{r nationality_status}
+
+p1 <- gitmo_ind %>% 
+  count(citizenship_country) %>% 
+  ggplot(aes(y = citizenship_country, x = n)) +
+  geom_col()
+
+p1
+
+```
+
+All individuals transferred were categorized as `gender` "Male"; where not missing, `ethnicity` is recorded as "Hispanic Origin". The only other demographic field included is `marital_status`, with the following breakdown:
+
+```{r marital_status}
+
+p1 <- gitmo_ind %>% 
+  count(marital_status) %>% 
+  ggplot(aes(y = marital_status, x = n)) +
+  geom_col()
+
+p1
+
+```
+
+The dataset includes a limited number of fields that relate to the legal status of detained people:
+
+```{r entry_status}
+
+p1 <- gitmo_ind %>% 
+  count(entry_status) %>% 
+  ggplot(aes(y = entry_status, x = n)) +
+  geom_col()
+
+p1
+
+```
+
+Most individuals transferred to Guantanamo did not have criminal convictions.
+
+```{r criminality}
+
+p1 <- gitmo_ind %>% 
+  count(book_in_criminality) %>% 
+  ggplot(aes(y = book_in_criminality, x = n)) +
+  geom_col()
+
+p1
+
+```
+
+One individual was transferred to Guantanamo Bay despite lacking a final order of removal, with `case_category` encoded as "[8B] Excludable / Inadmissible - Under Adjudication by IJ", indicating ongoing immigration hearings. This invidual was the only one represented in the dataset to be transferred away from Guantanamo Bay after a placement of approximately `r gitmo_detentions[!is.na(gitmo_detentions$stay_release_reason), "placement_length"]` days.
+
+```{r case_category}
+
+t1 <- gitmo_ind %>% 
+  count(case_category)
+
+knitr::kable(t1)
+
+```
+
+```{r initial_placement_validation}
+
+initial_placements <- gitmo_detention_stays %>% 
+  filter(placement_count == 1)
+
+stopifnot(nrow(initial_placements) == sum(initial_placements$initial_placement_approx))
+
+```
+
+For detention stays associated with transfers to Guantanamo, the earliest `stay_book_in_date_time` value is `r min(gitmo_detention_stays$stay_book_in_date_time)`, and the latest is `r max(gitmo_detention_stays$stay_book_in_date_time)`.
+
+As noted above, all detention stays associated with transfers to Guantanamo Bay were ongoing at the time of production of the dataset on February 18, 2025. This suggests that the current dataset contains full detention history records for all stays associated with transfers to Guantanamo bay.
+
+We can calculate the elapsed detention stay time per individual, with a range of `r min(gitmo_detentions$stay_length_elapsed)` to `r max(gitmo_detentions$stay_length_elapsed)` days and an average of `r mean(gitmo_detentions$stay_length_elapsed)` days.
+
+During stays associated with transfers to Guantanamo, detained people had experienced on average `r mean(gitmo_detention_stays$stay_placements)` facility placements, with a range of `r min(gitmo_detention_stays$stay_placements)` to `r max(gitmo_detention_stays$stay_placements)` placements, including at Guantanamo.
+
+```{r stay_length}
+
+hist(gitmo_ind$stay_length_elapsed)
+
+hist(gitmo_detention_stays$stay_placements)
+
+```
+
+Of individuals transferred to Guantanamo Bay, `r sum(gitmo_ind$stay_count == 1)` were experiencing their first stay in detention.  `r sum(gitmo_ind$stay_count > 1)` had experienced more than one detention stay; with `r sum(gitmo_ind$stay_count == 2)` experiencing 2 stays and `r sum(gitmo_ind$stay_count == 3)` experiencing 3 stays.
+
+```{r prior_stays}
+
+# Stays associated with transfers to Guantanamo
+gitmo_stays <- unique(gitmo_detention_stays$stayid)
+
+# Prior completed stays for individuals associated with transfers to Guantanamo
+prior_stays <- gitmo_detention_histories %>% 
+  filter(!stayid %in% gitmo_stays)
+
+prior_release <- prior_stays %>% 
+  mutate(release_reason = case_when(str_detect(stay_release_reason, "Order|Parole") ~ "OR/OS/Parole",
+                                    TRUE ~ stay_release_reason)) %>% 
+  count(release_reason)
+
+```
+
+Of these `r nrow(prior_stays)` prior stays, a total of `r prior_release[prior_release$release_reason == "OR/OS/Parole", "n"]` ended with release on an Order of Recognizance, Order of Supervision, or Parole, including humanitarian release. Remaining stays ended with removals or transfers to USMS or unspecified agencies.
+
+```{r prior_stay_release}
+
+t1 <- prior_stays %>% 
+  mutate(stay_release_reason = str_trunc(stay_release_reason, 40)) %>% 
+  count(stay_release_reason)
+
+knitr::kable(t1)
+
+```
+
+## ICE Arrests data
+
+```{r setup_arrests}
+
+file <- "ERO_Admin_Arrests_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
+
+arr <- read_excel(here('analyze', 'input', file), skip=6) %>%
+  janitor::clean_names() %>%
+  mutate(apprehension_date = as.Date(apprehension_date)) |>
+  mutate(apprehension_method = fct(apprehension_method)) |>
+  mutate(criminality = apprehension_criminality == "1 Convicted Criminal") |>
+  mutate(n_dupe = row_number(), .by = c("apprehension_date", "apprehension_method", "apprehension_criminality", "unique_identifier")) |>
+  filter(is.na(unique_identifier) | n_dupe == 1) |>
+  mutate(week = floor_date(apprehension_date, "week", week_start = "Monday"))
+
+arr_ids <- arr$unique_identifier
+
+gitmo_arr <- arr %>% 
+  filter(unique_identifier %in% unlist(gitmo_ind$unique_identifier))
+
+```
+
+ICE arrests data for the same time period include `r nrow(gitmo_arr)` records matching `unique_identifier` values associated with transfers to Guantanamo, with `r length(unique(gitmo_arr$unique_identifier))` unique identifier values.
+
+Individuals represented in the detention history dataset but not in the ICE arrests dataset may have been arrested by ICE prior to the period covered by the arrests dataset; or may have been transferred to ICE detention custody from CBP; current detention data lacks a `final_program` field which would indicate this.
+
+The ICE arrests data reveal that all of the individuals transferred to Guantanamo are Venezuelan males. All but `r sum(gitmo_arr$final_order_yes_no == "NO")` were subject to a final order of removal, as discussed above.
+
+The following charts explore various characteristics of the arrests data for these individuals:
+
+```{r gitmo_arr_characteristics}
+
+stopifnot(prop.table(table(as.factor(gitmo_arr$citizenship_country))['VENEZUELA']) == 1)
+
+stopifnot(prop.table(table(as.factor(gitmo_arr$gender))['Male']) == 1)
+
+p1 <- gitmo_arr %>% 
+  count(apprehension_method) %>% 
+  ggplot(aes(y = apprehension_method, x = n)) +
+  geom_col()
+
+p1
+
+p2 <- gitmo_arr %>% 
+  count(apprehension_state) %>% 
+  ggplot(aes(y = apprehension_state, x = n)) +
+  geom_col()
+
+p2
+
+p3 <- gitmo_arr %>% 
+  count(apprehension_aor) %>% 
+  ggplot(aes(y = apprehension_aor, x = n)) +
+  geom_col()
+
+p3
+
+p4 <- gitmo_arr %>% 
+  count(final_program) %>% 
+  ggplot(aes(y = final_program, x = n)) +
+  geom_col()
+
+p4
+
+p5 <- gitmo_arr %>% 
+  count(apprehension_criminality) %>% 
+  ggplot(aes(y = apprehension_criminality, x = n)) +
+  geom_col()
+
+p5
+
+p6 <- gitmo_arr %>% 
+  count(case_category) %>% 
+  ggplot(aes(y = case_category, x = n)) +
+  geom_col()
+
+p6
+
+```
+
+## Detention flow
+
+The following experimental plot explores a method of visualizing detention flows for all stays involving transfers to Guantanamo sites. Note y-axis not to scale in current version.
+
+To-do:
+
+- Ordinal detention stages relative to Guantanamo placements
+
+- Categorical detention stages: initial, current or Guantanamo facilities, final
+
+- Better scaling of Y axis, or label quantities
+
+- Better plot margins
+
+- Detention flow by other case/facility characteristics
+
+```{r detention_flow_gitmo, warning=FALSE}
+
+dat <- gitmo_detention_stays %>% 
+  dplyr::select(stayid, detention_facility_code, placement_count, stay_placements, current_placement) %>% 
+  mutate(relative_placement = placement_count - stay_placements)
+
+dat_wide <- dat %>% 
+  pivot_wider(id_cols = c(stayid), names_from = relative_placement, names_prefix = "facil_n", values_from = detention_facility_code)
+
+flows_gtmo <- dat_wide %>% 
+  dplyr::select(-c(stayid)) %>% 
+  group_by_all() %>% 
+  summarize(n = n()) %>% 
+  arrange(desc(n))
+
+stages = c("facil_n-10",
+           "facil_n-9",
+           "facil_n-8",
+           "facil_n-7",
+           "facil_n-6",
+           "facil_n-5",
+           "facil_n-4",
+           "facil_n-3",
+           "facil_n-2",
+           "facil_n-1",
+           "facil_n0")
+
+flows_gtmo_long <- flows_gtmo %>% 
+  pivot_stages_longer(stages_from = stages,
+                      values_from = "n") %>% 
+  filter(!is.na(node))
+
+p1 <- ggplot(flows_gtmo_long,
+       aes(x = stage, y = n, group = node,
+           connector = connector, edge_id = edge_id)) +
+  geom_sankeyedge(v_space = "auto", alpha=.5, aes(fill = node)) +
+  geom_sankeynode(v_space = "auto") +
+  labs(title = "Detention flows thru Gitmo")
+
+pos <- position_sankey(v_space = "auto")
+pos_text <- position_sankey(v_space = "auto", nudge_x = 0.1)
+
+p1 + geom_sankeyedge(aes(fill = node), position = pos) +
+  geom_sankeynode(position = pos) +
+  geom_text(aes(label = node), stat = "sankeynode", position = pos_text, hjust = 0, cex = 2) +
+  scale_x_discrete(expand = expansion(add = c(0.2, .6))) +
+  # scale_y_discrete(labels = NULL, breaks = NULL) +
+  # labs(y = NULL) +
+  guides(fill = FALSE)
+
+```

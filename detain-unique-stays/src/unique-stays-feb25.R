@@ -10,9 +10,9 @@ library(pacman)
 p_load(argparse, logger, tidyverse, arrow, lubridate, zoo, digest, readxl)
 
 parser <- ArgumentParser()
-parser$add_argument("--input", default = "ice_detentions_nov23-jun25.csv.gz")
+parser$add_argument("--input", default = "detain-unique-stays/input/ICE_Detentions_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx")
 parser$add_argument("--log", default = "detain-unique-stays/output/unique-stays.R.log")
-parser$add_argument("--output", default = "detain-unique-stays/output/ice_detentions_nov23-jun25.csv.gz")
+parser$add_argument("--output", default = "detain-unique-stays/output/ice_detentions_nov23-feb25.csv.gz")
 args <- parser$parse_args()
 
 # append log file
@@ -23,13 +23,13 @@ print("Reading data")
 
 file <- args$input
 
-df <- read_delim(here::here('detain-unique-stays', 'input', file), delim='|') %>% 
+df <- read_excel(here::here('detain-unique-stays', 'input', file), skip=6) %>% 
   janitor::clean_names() %>% 
-  mutate(stay_book_in_date_time = as_datetime(stay_book_in_date_time, format = "%m/%d/%Y %H:%M"),
-         book_in_date_time = as_datetime(book_in_date_time, format = "%m/%d/%Y %H:%M"),
-         detention_book_out_date_time = as_datetime(detention_book_out_date_time, format = "%m/%d/%Y %H:%M"),
-         stay_book_out_date_time = as_datetime(stay_book_out_date_time, format = "%m/%d/%Y %H:%M"),
-         stay_book_out_date = as.Date(stay_book_out_date, format = "%m/%d/%Y"))
+  mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
+         book_in_date_time = ymd_hms(book_in_date_time),
+         detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
+         stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
+         )
 
 log_info("Total rows in: {nrow(df)}")
 
@@ -42,8 +42,7 @@ df <- df %>% rowwise() %>%
          stayid = vdigest(stayCols)) %>%
   select(-c(allCols, stayCols))
 
-# This should be better
-max_date <- as.Date("2025-06-11")
+max_date <- as.Date("2025-02-18")
 
 df <- df %>% 
   filter(!is.na(stay_book_in_date_time),

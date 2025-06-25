@@ -20,7 +20,7 @@ library(pacman)
 
 p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl)
 
-file <- "ERO Detainers_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO Detainers_LESA-STU_FINAL_unprotected.xlsx"
 
 det <- read_excel(here('analyze', 'input', file), skip=6) %>% 
   janitor::clean_names()
@@ -51,9 +51,9 @@ tab2 <- det %>%
 
 ```{r setup_arrests}
 
-file <- "ERO Admin Arrests_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO Admin Arrests_LESA-STU_FINAL_unprotected.xlsx"
 
-arr <- read_excel(here('analyze', 'input', file), skip=6) %>% 
+arr <- read_excel(here('analyze', 'input', file), skip=5) %>% 
   janitor::clean_names() %>% 
   mutate(apprehension_date = as.Date(apprehension_date)) |>
   mutate(apprehension_method = fct(apprehension_method)) |>
