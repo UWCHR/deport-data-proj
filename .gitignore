@@ -15,3 +15,4 @@
 *.log
 write/output/*
 !share/input/facilities.csv.gz
+!import/frozen/*
