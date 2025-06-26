@@ -7,11 +7,10 @@
 # ---
 
 library(pacman)
-p_load(argparse, logger, tidyverse)
+p_load(argparse, logger, tidyverse, readxl)
 
 parser <- ArgumentParser()
-parser$add_argument("--input_1", default = "detain-concat/input/2025-ICLI-00019_2024-ICFO-39357_ICE_Detentions_LESA-STU_FINAL_unprotected_1.csv")
-parser$add_argument("--input_2", default = "detain-concat/input/2025-ICLI-00019_2024-ICFO-39357_ICE_Detentions_LESA-STU_FINAL_unprotected_2.csv")
+parser$add_argument("--input", default = "import/input/2025-ICLI-00019_2024-ICFO-39357_ICE_Detentions_LESA-STU_FINAL_unprotected.xlsx")
 parser$add_argument("--log", default = "detain-concat/output/detain-concat.R.log")
 parser$add_argument("--output", default = "detain-concat/output/ice_detentions_nov23-jun25.csv.gz")
 args <- parser$parse_args()
@@ -20,8 +19,8 @@ args <- parser$parse_args()
 f = args$log
 log_appender(appender_file(f))
 
-df1 <- read_csv(args$input_1, skip=6)
-df2 <- read_csv(args$input_2, skip=6)
+df1 <- read_excel(args$input, sheet=1, skip=6)
+df2 <- read_excel(args$input, sheet=2, skip=6)
 
 names_1 <- names(df1)
 names_2 <- names(df2)

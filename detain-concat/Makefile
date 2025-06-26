@@ -17,11 +17,10 @@ clean:
 
 output/ice_detentions_nov23-jun25.csv.gz: \
 	src/detain-concat.R \
-	input/2025-ICLI-00019_2024-ICFO-39357_ICE_Detentions_LESA-STU_FINAL_unprotected_1.csv.gz \
-	input/2025-ICLI-00019_2024-ICFO-39357_ICE_Detentions_LESA-STU_FINAL_unprotected_2.csv.gz 
+	../import/input/2025-ICLI-00019_2024-ICFO-39357_ICE_Detentions_LESA-STU_FINAL_unprotected.xlsx
+	mkdir -p input output
 	Rscript $< \
-		--input_1=input/2025-ICLI-00019_2024-ICFO-39357_ICE_Detentions_LESA-STU_FINAL_unprotected_1.csv.gz \
-		--input_2=input/2025-ICLI-00019_2024-ICFO-39357_ICE_Detentions_LESA-STU_FINAL_unprotected_2.csv.gz \
+		--input=../import/input/2025-ICLI-00019_2024-ICFO-39357_ICE_Detentions_LESA-STU_FINAL_unprotected.xlsx \
 		--log=output/detain-concat.R.log \
 		--output=$@
 

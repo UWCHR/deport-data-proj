@@ -25,11 +25,11 @@ file <- args$input
 
 df <- read_delim(here::here('detain-unique-stays', 'input', file), delim='|') %>% 
   janitor::clean_names() %>% 
-  mutate(stay_book_in_date_time = as_datetime(stay_book_in_date_time, format = "%m/%d/%Y %H:%M"),
-         book_in_date_time = as_datetime(book_in_date_time, format = "%m/%d/%Y %H:%M"),
-         detention_book_out_date_time = as_datetime(detention_book_out_date_time, format = "%m/%d/%Y %H:%M"),
-         stay_book_out_date_time = as_datetime(stay_book_out_date_time, format = "%m/%d/%Y %H:%M"),
-         stay_book_out_date = as.Date(stay_book_out_date, format = "%m/%d/%Y"))
+  mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
+         book_in_date_time = ymd_hms(book_in_date_time),
+         detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
+         stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
+         stay_book_out_date = ymd(stay_book_out_date))
 
 log_info("Total rows in: {nrow(df)}")
 
