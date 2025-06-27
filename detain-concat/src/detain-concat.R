@@ -19,8 +19,20 @@ args <- parser$parse_args()
 f = args$log
 log_appender(appender_file(f))
 
-df1 <- read_excel(args$input, sheet=1, skip=6)
-df2 <- read_excel(args$input, sheet=2, skip=6)
+df1 <- read_excel(args$input, sheet=1, skip=6) %>%
+	janitor::clean_names() %>% 
+	mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
+	         book_in_date_time = ymd_hms(book_in_date_time),
+	         detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
+	         stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
+	         stay_book_out_date = ymd(stay_book_out_date))
+df2 <- read_excel(args$input, sheet=2, skip=6) %>%
+	janitor::clean_names() %>% 
+	mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
+	         book_in_date_time = ymd_hms(book_in_date_time),
+	         detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
+	         stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
+	         stay_book_out_date = ymd(stay_book_out_date))
 
 names_1 <- names(df1)
 names_2 <- names(df2)

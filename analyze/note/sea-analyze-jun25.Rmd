@@ -24,6 +24,11 @@ output:
 	- Case category codes
 	- Nationality
 	- transfers
+	
+- Specific cases
+  - Randir Singh: "70348c2f6544a2dfeea0dd570003c96db5e6ccb4"
+  - Tuan Phan: "2b523cdad2a0705f5f06c4a1860c606e439c8abe"
+  - Alirio Guillermo Belloso Fuenmayor: "6335e4aecd3301ac6f97edf57dddacf7409b0698"
 
 ```{r setup, message=FALSE, warning=FALSE, include=TRUE}
 
@@ -93,23 +98,30 @@ file <- "2025-ICLI-00019_2024-ICFO-39357_ICE_Detentions_LESA-STU_FINAL_unprotect
 
 detention_df_1 <- read_excel(here('analyze', 'input', file), sheet=1, skip=6) %>% 
   janitor::clean_names() %>% 
-  mutate(stay_book_in_date_time = as.Date(stay_book_in_date_time, format = "%m/%d/%Y %H:%M"),
-         book_in_date_time = as.Date(book_in_date_time, format = "%m/%d/%Y %H:%M"),
-         stay_book_out_date_time = as.Date(stay_book_out_date_time, format = "%m/%d/%Y %H:%M"),
-         stay_book_in_date_time = as.Date(stay_book_out_date, format = "%m/%d/%Y %H:%M"),
+  mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
+         book_in_date_time = ymd_hms(book_in_date_time),
+         detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
+         stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
+         stay_book_out_date = ymd(stay_book_out_date),
          book_in_fy = substr(quarter(book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4),
          stay_book_in_fy = substr(quarter(stay_book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4))
 
 detention_df_2 <- read_excel(here('analyze', 'input', file), sheet=2, skip=6) %>% 
   janitor::clean_names() %>% 
-  mutate(stay_book_in_date_time = as.Date(stay_book_in_date_time, format = "%m/%d/%Y %H:%M"),
-         book_in_date_time = as.Date(book_in_date_time, format = "%m/%d/%Y %H:%M"),
-         stay_book_out_date_time = as.Date(stay_book_out_date_time, format = "%m/%d/%Y %H:%M"),
-         stay_book_in_date_time = as.Date(stay_book_out_date, format = "%m/%d/%Y %H:%M"),
+  mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
+         book_in_date_time = ymd_hms(book_in_date_time),
+         detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
+         stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
+         stay_book_out_date = ymd(stay_book_out_date),
          book_in_fy = substr(quarter(book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4),
          stay_book_in_fy = substr(quarter(stay_book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4))
 
 detention_df <- rbind(detention_df_1, detention_df_2)
+
+detention_df <- detention_df %>% 
+  group_by(unique_identifier) %>% 
+  arrange(stay_book_in_date_time, book_in_date_time, unique_identifier) %>% 
+  ungroup()
 
 rm(detention_df_1, detention_df_2)
 
@@ -119,7 +131,7 @@ detention_ids <- unique(detention_df$unique_identifier)
 
 ```{r setup_removals}
 
-file <- "2025-ICLI-00019_2024-ICFO-39357_ICE Removals_LESA-STU_FINAL_2025only_unprotected.xlsx"
+file <- "2025-ICLI-00019_2024-ICFO-39357_ICE_Removals_LESA-STU_FINAL_2025only_unprotected.xlsx"
 
 removals_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
   janitor::clean_names()
@@ -153,27 +165,222 @@ p2
 
 ```{r setup_id_intersect_cols}
 
-detention_df <- detention_df |>
+detention_df <- detention_df %>%
   mutate(id_in_arrests = unique_identifier %in% arrest_ids,
-         id_in_detainers = unique_identifier %in% detainer_ids)
+         id_in_detainers = unique_identifier %in% detainer_ids,
+         id_in_removals = unique_identifier %in% removal_ids)
 
-arrest_df<- arrest_df|>
+arrest_df <- arrest_df|>
   mutate(id_in_detentions = unique_identifier %in% detention_ids,
-         id_in_detainers = unique_identifier %in% detainer_ids)
+         id_in_detainers = unique_identifier %in% detainer_ids,
+         id_in_removals = unique_identifier %in% removal_ids)
 
 detainer_df<- detainer_df|>
   mutate(id_in_arrests = unique_identifier %in% arrest_ids,
-         id_in_detainers = unique_identifier %in% detainer_ids)
+         id_in_detainers = unique_identifier %in% detainer_ids,
+         id_in_removals = unique_identifier %in% removal_ids)
 
 ```
 
-```{r}
+# Third country deportations
 
-dat <- detention_df %>% 
-  mutate(fy = substr(quarter(book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4)) %>% 
-  group_by(fy) %>% 
-  summarize(id_in_arrests_mean = mean(id_in_arrests))
+```{r third_country_deportations_ids}
 
-dat
+removals_third_country_ids <- removals_df %>% 
+  filter(departure_country != citizenship_country) %>% 
+  dplyr::select(unique_identifier)
+
+arrests_third_country_ids <- arrest_df %>% 
+  filter(!is.na(departure_country)) %>% 
+  filter(departure_country != citizenship_country) %>% 
+  dplyr::select(unique_identifier)
+
+detention_third_country_ids <- detention_df %>% 
+  filter(!is.na(departure_country)) %>% 
+  filter(departure_country != citizenship_country) %>% 
+  dplyr::select(unique_identifier)
+
+third_country_ids <- union(removals_third_country_ids, arrests_third_country_ids)
+
+third_country_ids <- unlist(union(third_country_ids, detention_third_country_ids))
 
 ```
+
+```{r removals_df_only}
+
+removals_df <- removals_df %>% 
+  mutate(third_country_deport = departure_country != citizenship_country)
+
+p1 <- removals_df %>% 
+  mutate(yearmon = as.yearmon(departed_date)) %>% 
+  count(yearmon, third_country_deport) %>% 
+  ggplot(aes(x = yearmon, y = n, color = third_country_deport)) +
+  geom_line()
+
+p1
+
+tab1 <- removals_df %>% 
+  filter(third_country_deport == TRUE) %>% 
+  count(citizenship_country, departure_country)
+
+# This is not all-inclusive, `docket_aor` is misleading filter
+seattle_third_country_removals <- removals_df %>% 
+  filter(third_country_deport == TRUE,
+         docket_aor == "Seattle Area of Responsibility")
+
+tab2 <- seattle_third_country_removals %>% 
+  count(citizenship_country, departure_country)
+
+alirio_fuenmayor <- "6335e4aecd3301ac6f97edf57dddacf7409b0698"
+
+```
+
+```{r seattle_cecot}
+
+# This dataset agrees with reported count of 220 CECOT expulsions
+cecot_expulsions <- removals_df %>% 
+  filter(citizenship_country == "VENEZUELA",
+         departure_country == "EL SALVADOR",
+         departed_date == as.Date("2025-03-15"))
+
+cecot_arrest <- arrest_df %>% 
+    filter(unique_identifier %in% cecot_expulsions$unique_identifier)
+
+seattle_cecot_arrest <- cecot_arrest %>% 
+  filter(apprehension_aor == "Seattle Area of Responsibility",
+    unique_identifier %in% cecot_expulsions$unique_identifier)
+
+cecot_detention <- detention_df %>% 
+  filter(unique_identifier %in% cecot_expulsions$unique_identifier)
+
+nwdc_cecot_detention <- cecot_detention %>% 
+  filter(detention_facility_code == "CSCNWWA")
+
+```
+
+```{r arrests_df_only}
+
+seattle_third_country_arrests <- arrest_df %>% 
+  filter(apprehension_aor == "Seattle Area of Responsibility",
+         unique_identifier %in% unlist(third_country_ids))
+
+# Note possible multiple arrests per individual
+tab1 <- seattle_third_country_arrests %>%
+  filter(!is.na(departure_country)) %>% 
+  count(citizenship_country, departure_country)
+
+```
+
+# Guantanamo
+
+```{r gtmo}
+
+gitmo_detentions <- detention_df[detention_df$detention_facility_code %in% c("GTMOACU", "GTMODCU"),]
+
+# Get all detention history records for individuals transferred to Guantanamo Bay
+gitmo_detention_histories <- detention_df[detention_df$unique_identifier %in% unique(gitmo_detentions$unique_identifier),]
+
+seattle_gitmo_arrests <- arrest_df %>% 
+  filter(apprehension_aor == "Seattle Area of Responsibility",
+         unique_identifier %in% gitmo_detentions$unique_identifier)
+
+seattle_gitmo_detentions <- gitmo_detention_histories %>% 
+  filter(detention_facility_code %in% c("CSCNWWA", "SEAHOLD", "YAKHOLD"))
+
+seattle_gitmo_transfers <- unique(seattle_gitmo_detentions$unique_identifier)
+
+seattle_gitmo_full_histories <- detention_df %>% 
+  filter(unique_identifier %in% seattle_gitmo_transfers)
+
+seattle_gitmo_transfer_arrests <- arrest_df %>% filter(unique_identifier %in% seattle_gitmo_transfers)
+
+```
+
+# Individual cases
+
+```{r randir_singh}
+
+randir_singh <- "70348c2f6544a2dfeea0dd570003c96db5e6ccb4"
+
+rs_detention <- detention_df %>% 
+  filter(unique_identifier == randir_singh)
+
+rs_removal <- removals_df %>% 
+  filter(unique_identifier == randir_singh)
+```
+
+```{r tuan_phan}
+
+tuan_phan <- "2b523cdad2a0705f5f06c4a1860c606e439c8abe"
+
+tp_arrest <- arrest_df %>% 
+  filter(unique_identifier == tuan_phan)
+
+tp_detention <- detention_df %>% 
+  filter(unique_identifier == tuan_phan)
+
+tp_removal <- removals_df %>% 
+  filter(unique_identifier == tuan_phan)
+```
+
+```{r alirio}
+
+alirio_fuenmayor <- "6335e4aecd3301ac6f97edf57dddacf7409b0698"
+
+af_arrest <- arrest_df %>% 
+  filter(unique_identifier == alirio_fuenmayor)
+
+af_detention <- detention_df %>% 
+  filter(unique_identifier == alirio_fuenmayor)
+
+af_removal <- removals_df %>% 
+  filter(unique_identifier == alirio_fuenmayor)
+
+unknown_venezuelan <- "2e0d711d0bddf00b8e55a1be785881075026a7d8"
+
+uv_arrest <- arrest_df %>% 
+  filter(unique_identifier == unknown_venezuelan)
+
+uv_detention <- detention_df %>% 
+  filter(unique_identifier == unknown_venezuelan)
+
+uv_removal <- removals_df %>% 
+  filter(unique_identifier == unknown_venezuelan)
+
+```
+
+# Spokane Q
+
+```{r spokane}
+
+sea_arrests <- arrest_df %>% 
+  filter(apprehension_aor == "Seattle Area of Responsibility")
+
+spokane_hold_room <- detention_df %>% 
+  filter(detention_facility_code == "SPOHOLD")
+
+spokane_detentions <- detention_df %>% 
+  filter(unique_identifier %in% spokane_hold_room$unique_identifier)
+
+tab1 <- spokane_hold_room %>% 
+  mutate(book_in_yearmon = as.yearmon(stay_book_in_date_time)) %>% 
+  group_by(book_in_yearmon) %>% 
+  count()
+
+knitr::kable(tab1)
+
+p1 <- tab1 %>% 
+  ggplot(aes(x = book_in_yearmon, y = n)) +
+  geom_col() +
+  labs(title = "Spokane Hold Room book-ins") +
+  xlab("Month") +
+  ylab("Book-ins")
+
+p1
+
+# Spokane hold room arrests include ID, elsewhere
+spokane_hold_room_arrests <- arrest_df %>% 
+  filter(unique_identifier %in% spokane_hold_room$unique_identifier)
+
+```
+ 
