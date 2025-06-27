@@ -384,3 +384,22 @@ spokane_hold_room_arrests <- arrest_df %>%
 
 ```
  
+```{r headcount}
+
+headcount <- read_delim(here::here('detain-headcount', 'output', 'headcount_detloc_nov23-jun25.csv.gz'), delim="|")
+
+cscnwwa <- headcount %>% 
+  filter(detention_facility_code == 'CSCNWWA')
+
+p1 <- cscnwwa %>% 
+  filter(date > "2023-11-01") %>% 
+  ggplot(aes(x = date, y = n)) +
+  geom_line() +
+  geom_hline(yintercept = 1575, color="red") +
+  ylim(0, NA) +
+  labs(title = "NWDC population, Nov. 2023 - Jun. 2025")
+
+p1
+ 
+```
+ 
