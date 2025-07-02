@@ -26,7 +26,7 @@ p_load(here, tidyverse, zoo, lubridate, ggplot2, ggforce, plotly, gghighlight, v
 
 ```
 
-```{r setup_detainers}
+```{r setup_detainers, message=FALSE, warning=FALSE, include=TRUE}
 
 file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Detainers_LESA-STU_FINAL_unprotected.xlsx"
 
@@ -40,7 +40,7 @@ detainer_ids <- unique(detainer_df$unique_identifier)
 
 ```
 
-```{r setup_encounters}
+```{r setup_encounters, message=FALSE, warning=FALSE, include=TRUE}
 
 file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Encounters_FINAL_unprotected.xlsx"
 
@@ -60,7 +60,7 @@ encounter_ids <- unique(encounter_df$unique_identifier)
 
 ```
 
-```{r setup_arrests}
+```{r setup_arrests, message=FALSE, warning=FALSE, include=TRUE}
 
 file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests_LESA-STU_FINAL_unprotected.xlsx"
 
@@ -78,7 +78,7 @@ arrest_ids <- unique(arrest_df$unique_identifier)
 
 ```
 
-```{r setup_detention}
+```{r setup_detention, message=FALSE, warning=FALSE, include=TRUE}
 
 file <- "ice_detentions_nov23-jun25.csv.gz"
 
@@ -101,7 +101,7 @@ detention_ids <- unique(detention_df$unique_identifier)
 
 ```
 
-```{r setup_removals}
+```{r setup_removals, message=FALSE, warning=FALSE, include=TRUE}
 
 file <- "2025-ICLI-00019_2024-ICFO-39357_ICE_Removals_LESA-STU_FINAL_2025only_unprotected.xlsx"
 
@@ -120,11 +120,11 @@ sets <- list("encounters" = encounter_ids,
              "detentions" = detention_ids,
              "removals" = removal_ids)
 
-p1 <- ggVennDiagram(x = sets,
+vd1 <- ggVennDiagram(x = sets,
               force_upset = TRUE, order.set.by = "name", order.intersect.by = "size"
               )
 
-p1 
+vd1 
 
 ```
 
@@ -149,6 +149,37 @@ removals_df <- removals_df |>
   mutate(id_in_detentions = unique_identifier %in% detention_ids,
          id_in_detainers = unique_identifier %in% detainer_ids,
          id_in_arrests = unique_identifier %in% arrest_ids)
+
+```
+
+Only a minority of arrest and removal IDs coincide, despite arrests covering longer time period than removals.  Trend for arrests dataset "looks better" than trend for removals dataset. Note DDP signals problems with removals dataset.
+
+```{r plot_id_time}
+
+sets <- list("arrests" = arrest_ids,
+             "removals" = removal_ids)
+
+vd1 <- ggVennDiagram(x = sets,
+              force_upset = TRUE, order.set.by = "name", order.intersect.by = "size"
+              )
+
+vd1 
+
+p1 <- removals_df %>% 
+  mutate(week = floor_date(departed_date, "week", week_start = "Monday")) %>% 
+  count(week, id_in_arrests) %>% 
+  ggplot(aes(x = week, y = n, color = id_in_arrests)) +
+  geom_line()
+
+p1
+
+p2 <- arrest_df %>% 
+  mutate(week = floor_date(apprehension_date, "week", week_start = "Monday")) %>% 
+  count(week, id_in_removals) %>% 
+  ggplot(aes(x = week, y = n, color = id_in_removals)) +
+  geom_line()
+
+p2
 
 ```
 
@@ -228,7 +259,7 @@ p2
 
 ```
 
-Arrests dataset also has `departed_date` and `departed_country` values associated with removals. But these account for only a partial share of removals documented in removals dataset. Unlcear why. One reason would be removals resulting from arrests which occurred prior to scope of arrests dataset.
+Arrests dataset also has `departed_date` and `departed_country` values associated with removals. But these account for only a partial share of removals documented in removals dataset. One reason would be removals resulting from arrests which occurred prior to scope of arrests dataset. For this reason probably best to rely on removals dataset for analysis of this phenomenon?
 
 ```{r compare_removals_arrests}
 
@@ -284,7 +315,7 @@ third_country_ids <- unlist(union(third_country_ids, detention_third_country_ids
 ```{r removals_df_only}
 
 removals_df <- removals_df %>% 
-  mutate(third_country_deport = departure_country != citizenship_country)
+  mutate(third_country_deport = unique_identifier %in% third_country_ids)
 
 p1 <- removals_df %>% 
   mutate(yearmon = as.yearmon(departed_date)) %>% 
@@ -306,12 +337,117 @@ p1.1
 
 ```
 
-```{r}
+```{r pct_third_country_natl}
+
+dat <- removals_df %>% 
+  mutate(week = floor_date(departed_date, "week", week_start = "Monday")) %>% 
+  count(week, third_country_deport) %>% 
+  mutate(type = "national")
+
+dat_wide <- dat %>% 
+  pivot_wider(id_cols = c("week"), names_from = "third_country_deport", names_prefix = "third_country_", values_from = "n") %>% 
+  group_by(week) %>% 
+  mutate(pct_third_country = third_country_TRUE / sum(third_country_TRUE, third_country_FALSE),
+         type = "removals dataset")
+
+p1 <- dat_wide %>% 
+  ggplot(aes(x = week, y = pct_third_country)) +
+  geom_line() +
+  scale_y_continuous(labels = scales::percent) +
+  labs(title = "Third-country deportations as % of weekly total",
+       subtitle = "Nationwide, since Jan. 2025",
+       caption = "Source: ICE 'removals' dataset obtained by DDP")
+
+p1
+
+```
+
+```{r pct_third_country_natl_via_arrests}
+
+arrest_df <- arrest_df %>% 
+  mutate(third_country_deport = unique_identifier %in% third_country_ids)
+
+dat1 <- arrest_df %>% 
+  filter(!is.na(departure_country),
+    departed_date >= "2023-11-01") %>% 
+  mutate(week = floor_date(departed_date, "week", week_start = "Monday")) %>% 
+  count(week, third_country_deport) %>% 
+  mutate(type = "arrests dataset")
+
+dat1_wide <- dat1 %>% 
+  pivot_wider(id_cols = c("week"), names_from = "third_country_deport", names_prefix = "third_country_", values_from = "n") %>% 
+  group_by(week) %>% 
+  mutate(pct_third_country = third_country_TRUE / sum(third_country_TRUE, third_country_FALSE),
+         type = "national_via_arrests")
+
+p1 <- dat1_wide %>% 
+  ggplot(aes(x = week, y = pct_third_country)) +
+  geom_line() +
+  scale_y_continuous(labels = scales::percent) +
+  labs(title = "Third-country deportations as % of weekly total",
+       subtitle = "Nationwide, since Nov. 2023",
+       caption = "Source: ICE 'arrests' dataset obtained by DDP")
+
+p1
+
+```
+
+```{r compare}
+
+compare_dat <- rbind(dat_wide, dat1_wide)
+
+p1 <- compare_dat %>% 
+  ggplot(aes(x = week, y = pct_third_country, color = type)) +
+  geom_line() +
+  scale_y_continuous(labels = scales::percent) +
+  labs(title = "Third-country deportations as % of weekly total",
+       subtitle = "Comparison of records drawn from arrests versus removals datasets")
+
+p1
+
+```
+
+```{r pct_third_country_aor}
+
+dat <- removals_df %>% 
+  mutate(week = floor_date(departed_date, "week", week_start = "Monday"),
+         docket_aor = str_replace(docket_aor, " Area of Responsibility", "")) %>% 
+  count(week, third_country_deport, docket_aor) %>% 
+  mutate(type = "national")
+
+dat_wide <- dat %>% 
+  pivot_wider(id_cols = c("week", "docket_aor"), names_from = "third_country_deport", names_prefix = "third_country_", values_from = "n") %>% 
+  group_by(week, docket_aor) %>% 
+  mutate(pct_third_country = third_country_TRUE / sum(third_country_TRUE, third_country_FALSE))
+
+p1 <- dat_wide %>% 
+  ggplot(aes(x = week, y = pct_third_country)) +
+  geom_line() +
+  scale_y_continuous(labels = scales::percent) +
+  labs(title = "Third-country deportations as % of weekly total",
+       subtitle = "per Docket AOR, since Jan. 2025") +
+  facet_wrap(~docket_aor)
+
+p1
+
+```
+
+```{r citizenship_departure_country}
 
 tab1 <- removals_df %>% 
   filter(third_country_deport == TRUE) %>% 
   count(citizenship_country, departure_country) %>% 
   arrange(desc(n))
+
+p1 <- tab1 %>% 
+  mutate(name = paste(citizenship_country, departure_country, sep = "-"),
+         name = fct_reorder(name, desc(n))) %>% 
+  head(10) %>% 
+  ggplot(aes(y = name, x = n)) +
+  geom_col() +
+  labs(title = "Top 10 citizenship-departure country pairs")
+
+p1
 
 tab1.1 <- removals_df %>% 
   filter(third_country_deport == TRUE) %>% 
@@ -323,7 +459,7 @@ p1.1 <- tab1.1 %>%
   head(10) %>% 
   ggplot(aes(y = citizenship_country, x = n)) +
   geom_col() +
-  labs(title = "Third-country removals by citizenship")
+  labs(title = "Top 10 third-country removals by citizenship")
 
 p1.1  
 
@@ -337,46 +473,35 @@ p1.2 <- tab1.2 %>%
   head(10) %>% 
   ggplot(aes(y = departure_country, x = n)) +
   geom_col() +
-  labs(title = "Third-country removals by departure country")
+  labs(title = "Top 10 third-country removals by departure country")
 
 p1.2 
 
 ```
 
-```{r}
+How to get all Seattle area third-country removals:
+- All Seattle AOR arrests, removal docket, and detentions
+- With third country deport characteristics
+
+Need:
+- Detention facility AOR
+
+```{r seattle_third_country_removals}
+
+seattle_arrest_ids <- arrest_df[arrest_df$apprehension_aor == "Seattle Area of Responsibility", "unique_identifier"]
 
 # This is not all-inclusive, `docket_aor` is misleading filter
+# Looking for records with Seattle AOR docket or arrest in Seattle AOR
 seattle_third_country_removals <- removals_df %>% 
   filter(third_country_deport == TRUE,
-         docket_aor == "Seattle Area of Responsibility")
+         docket_aor == "Seattle Area of Responsibility" | unique_identifier %in% unlist(seattle_arrest_ids))
 
-```
-
-Here we check number of apparent third-country deportations based on characteristics of single dataset versus ids from all datasets; results appear to be same for Seattle AOR:
-
-```{r check_ids}
-
-p2 <- removals_df %>% 
-  filter(docket_aor == "Seattle Area of Responsibility") %>% 
-  mutate(yearmon = as.yearmon(departed_date)) %>% 
-  count(yearmon, third_country_deport) %>% 
-  ggplot(aes(x = yearmon, y = n, color = third_country_deport)) +
-  geom_line()
-
-p2
-
-p2.1 <- removals_df %>% 
-  filter(docket_aor == "Seattle Area of Responsibility") %>% 
-  mutate(yearmon = as.yearmon(departed_date),
-         third_country_id = unique_identifier %in% third_country_ids) %>% 
-  count(yearmon, third_country_id) %>% 
-  ggplot(aes(x = yearmon, y = n, color = third_country_id)) +
-  geom_line()
-
-p2.1
-
+# Minimal pattern except Venezuelans to Mexico
 tab2 <- seattle_third_country_removals %>% 
-  count(citizenship_country, departure_country)
+  count(citizenship_country, departure_country) %>% 
+  arrange(desc(n))
+
+knitr::kable(head(tab2, 10))
 
 ```
 
@@ -423,6 +548,43 @@ seattle_third_country_arrests <- arrest_df %>%
 # Note possible multiple arrests per individual
 tab1 <- seattle_third_country_arrests %>%
   filter(!is.na(departure_country)) %>% 
-  count(citizenship_country, departure_country)
+  count(citizenship_country, departure_country) %>% 
+  arrange(desc(n))
+
+knitr::kable(head(tab1, 10))
+
+```
+
+Here we check number of apparent third-country deportations based on characteristics of single dataset versus ids from all datasets; results appear to be same for Seattle AOR when querying same dataset:
+
+```{r check_ids}
+
+p2 <- removals_df %>% 
+  filter(docket_aor == "Seattle Area of Responsibility") %>% 
+  mutate(yearmon = as.yearmon(departed_date)) %>% 
+  count(yearmon, third_country_deport) %>% 
+  ggplot(aes(x = yearmon, y = n, color = third_country_deport)) +
+  geom_line()
+
+p2
+
+p2.1 <- removals_df %>% 
+  filter(docket_aor == "Seattle Area of Responsibility") %>% 
+  mutate(yearmon = as.yearmon(departed_date),
+         third_country_id = unique_identifier %in% third_country_ids) %>% 
+  count(yearmon, third_country_id) %>% 
+  ggplot(aes(x = yearmon, y = n, color = third_country_id)) +
+  geom_line()
+
+p2.1
+
+```
+
+```{r join_arrests_removals}
+
+arrests_w_removal_data <- arrest_df %>% 
+  filter(!is.na(departure_country))
+
+
 
 ```
