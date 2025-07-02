@@ -20,7 +20,7 @@ library(pacman)
 
 p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, digest)
 
-file <- "headcount_detloc_nov23-feb25.csv.gz"
+file <- "headcount_detloc_nov23-jun25.csv.gz"
 
 df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
   mutate(date = as.Date(date))
@@ -188,11 +188,11 @@ p2.1
 ```{r old_headcount}
 
 old_headcount <- read_delim(here::here('analyze', 'input', 'headcount_fy12-24ytd.csv.gz')) %>% 
-  mutate(dataset = "UWCHR") %>% 
-  filter(date >= "2011-11-01")
+  mutate(dataset = "UWCHR")
+  # filter(date >= "2011-11-01")
 
 new_headcount <- df %>% 
-  filter(date >= "2023-11-15") %>%
+  # filter(date >= "2023-11-15") %>%
   dplyr::select(date, n, detention_facility_code) %>% 
   mutate(dataset = "Deportation Data Project")
 
@@ -245,7 +245,8 @@ p2
 old_headcount <- read_delim(here::here('analyze', 'input', 'headcount_fy11-24ytd.csv.gz')) %>% 
   mutate(dataset = "UWCHR") %>% 
   filter(date >= "2011-11-01",
-         detention_facility_code == "CSCNWWA")
+         detention_facility_code == "CSCNWWA"
+         )
 
 new_headcount <- df %>% 
   filter(date >= "2023-11-15",
@@ -261,7 +262,7 @@ p1 <- dat %>%
   ggplot(aes(x = date, y = n, color = dataset)) +
   geom_line() +
   ylim(0, NA) +
-  labs(title = "NWDC detention population, Nov. 2011 - Feb. 2025",
+  labs(title = "NWDC detention population, Nov. 2011 - Jun. 2025",
        subtitle = "Comparison of UWCHR, Deportation Data Project datasets")
 
 p1
