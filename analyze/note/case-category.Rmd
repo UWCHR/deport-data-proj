@@ -1,0 +1,209 @@
+---
+title: "Analysis of case category status"
+author: "UWCHR"
+date: "2025-07-02"
+output:
+    html_document:
+        html_preview: true
+        toc: true
+        toc_depth: 3
+        toc_float: true
+        code_folding: hide
+---
+
+```{r setup, message=FALSE, warning=FALSE, include=TRUE}
+
+options(scipen = 1000000)
+
+library(pacman)
+
+p_load(here, tidyverse, zoo, lubridate, ggplot2, ggforce, plotly, gghighlight, viridis, readxl, ggVennDiagram)
+
+```
+
+```{r setup_arrests, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests_LESA-STU_FINAL_unprotected.xlsx"
+
+arrest_df<- read_excel(here('analyze', 'input', file), skip=5) %>% 
+  janitor::clean_names()
+
+arrest_df <- arrest_df %>% 
+  mutate(apprehension_date = as.Date(apprehension_date)) |>
+  # mutate(apprehension_method = fct(apprehension_method)) |>
+  mutate(criminality = apprehension_criminality == "1 Convicted Criminal") |>
+  mutate(n_dupe = row_number(), .by = c("apprehension_date", "apprehension_method", "apprehension_criminality", "unique_identifier")) |>
+  filter(!is.na(unique_identifier))
+
+arrest_ids <- unique(arrest_df$unique_identifier)
+
+```
+
+
+```{r setup_removals, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "2025-ICLI-00019_2024-ICFO-39357_ICE_Removals_LESA-STU_FINAL_2025only_unprotected.xlsx"
+
+removals_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
+  janitor::clean_names() %>% 
+  filter(!is.na(unique_identifier))
+
+removal_ids <- unique(removals_df$unique_identifier)
+
+removal_statuses <- unique(removals_df$case_status)
+
+```
+
+```{r}
+
+# Essentially all arrests with a status indicating removal have a departed date, departure country
+arrests_with_removal <- arrest_df %>% 
+  filter(case_status %in% removal_statuses)
+
+# ...and vice versa. So can use any of these vars to identify removals within arrests data
+arrests_without_removal <- arrest_df %>% 
+  filter(!case_status %in% removal_statuses)
+
+```
+
+```{r}
+
+dat <- arrest_df %>% 
+  filter(case_status %in% removal_statuses) %>% 
+  mutate(month = floor_date(departed_date, "month")) %>% 
+  count(month, case_category)
+  
+p1 <- dat %>% 
+  filter(month >= "2023-11-01",
+         month < "2025-05-01") %>% 
+  ggplot(aes(x = month, y = n, color = case_category)) +
+  geom_line()
+
+plotly::ggplotly(p1)
+
+```
+
+```{r}
+
+dat <- removals_df %>% 
+  mutate(month = floor_date(departed_date, "month")) %>% 
+  count(month, case_category)
+  
+p1 <- dat %>% 
+  filter(month >= "2023-11-01",
+         month < "2025-05-01") %>% 
+  ggplot(aes(x = month, y = n, color = case_category)) +
+  geom_line()
+
+plotly::ggplotly(p1)
+
+```
+
+```{r}
+
+dat <- arrest_df %>% 
+  filter(case_status %in% removal_statuses,
+         apprehension_aor == "Seattle Area of Responsibility") %>% 
+  mutate(month = floor_date(departed_date, "month")) %>% 
+  count(month, case_category)
+  
+p1 <- dat %>% 
+  filter(month >= "2025-01-01",
+         month < "2025-05-01") %>% 
+  ggplot(aes(x = month, y = n, color = case_category)) +
+  geom_line()
+
+plotly::ggplotly(p1)
+
+```
+
+```{r}
+
+dat <- removals_df %>% 
+  filter(docket_aor == "Seattle Area of Responsibility") %>% 
+  mutate(month = floor_date(departed_date, "month")) %>% 
+  count(month, case_category)
+  
+p1 <- dat %>% 
+  filter(month >= "2023-11-01",
+         month < "2025-05-01") %>% 
+  ggplot(aes(x = month, y = n, color = case_category)) +
+  geom_line()
+
+plotly::ggplotly(p1)
+
+```
+
+
+```{r}
+
+pending <- c('2A', '2B', '8A', '8B', '8D')
+benefit <- c('5C', '5D')
+expedited_admin_rein <- c('8F', '8G', '8H', '8I', '11', '16')
+
+dat <- removals_df %>% 
+  filter(docket_aor == "Seattle Area of Responsibility") %>% 
+  mutate(month = floor_date(departed_date, "month"),
+         case_category_group = case_when(str_detect(case_category, paste0(pending, collapse="|")) ~ "pending case",
+                                         str_detect(case_category, paste0(benefit, collapse="|")) ~ "benefit blocking deport",
+                                         str_detect(case_category, paste0(expedited_admin_rein, collapse="|")) ~ "lack of due process",
+                                         TRUE ~ "all other categories"
+                                         )) %>% 
+  count(month, case_category_group)
+  
+p1 <- dat %>% 
+  filter(month >= "2023-11-01",
+         month < "2025-06-01") %>% 
+  ggplot(aes(x = month, y = n, fill = case_category_group)) +
+  geom_col()
+
+plotly::ggplotly(p1)
+
+```
+
+```{r}
+
+pending <- c('2A', '2B', '8A', '8B', '8D')
+benefit <- c('5C', '5D')
+expedited_admin_rein <- c('8F', '8G', '8H', '8I', '11', '16')
+
+dat <- arrest_df %>% 
+  filter(apprehension_aor == "Seattle Area of Responsibility") %>% 
+  mutate(month = floor_date(departed_date, "month"),
+         case_category_group = case_when(str_detect(case_category, paste0(pending, collapse="|")) ~ "pending case",
+                                         str_detect(case_category, paste0(benefit, collapse="|")) ~ "benefit blocking deport",
+                                         str_detect(case_category, paste0(expedited_admin_rein, collapse="|")) ~ "lack of due process",
+                                         TRUE ~ "all other categories"
+                                         )) %>% 
+  count(month, case_category_group)
+  
+p1 <- dat %>% 
+  filter(month >= "2023-11-01",
+         month < "2025-06-01") %>% 
+  ggplot(aes(x = month, y = n, fill = case_category_group)) +
+  geom_col()
+
+plotly::ggplotly(p1)
+
+```
+
+```{r}
+
+arrests_subset <- arrest_df %>% 
+  dplyr::select(unique_identifier, case_status, case_category)
+
+removals_subset <- removals_df %>% 
+  dplyr::select(unique_identifier, case_status, case_category)
+
+compare_subsets <- inner_join(arrests_subset, removals_subset, by="unique_identifier", suffix = c(".arrests", ".removals"), relationship = "many-to-many")
+
+compare_subsets$status_equal <- compare_subsets$case_status.arrests == compare_subsets$case_status.removals
+
+compare_subsets$category_equal <- compare_subsets$case_category.arrests == compare_subsets$case_category.removals
+
+unequal_compare <- compare_subsets %>% 
+  filter(status_equal != TRUE | category_equal != TRUE)
+
+```
+
+

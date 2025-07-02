@@ -1,7 +1,7 @@
 ---
-title: "Comparison of anonymized identifiers across datasets"
+title: "Analysis of apparent third-country deportations"
 author: "UWCHR"
-date: "2025-03-31"
+date: "2025-07-02"
 output:
     html_document:
         html_preview: true
@@ -28,35 +28,35 @@ p_load(here, tidyverse, zoo, lubridate, ggplot2, ggforce, plotly, gghighlight, v
 
 ```{r setup_detainers, message=FALSE, warning=FALSE, include=TRUE}
 
-file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Detainers_LESA-STU_FINAL_unprotected.xlsx"
-
-detainer_df<- read_excel(here('analyze', 'input', file), skip=6) %>% 
-  janitor::clean_names()
-
-detainer_df<- detainer_df%>% 
-  mutate(date_diff = difftime(detainer_prepare_date, apprehension_date, units = "days"))
-
-detainer_ids <- unique(detainer_df$unique_identifier)
+# file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Detainers_LESA-STU_FINAL_unprotected.xlsx"
+# 
+# detainer_df<- read_excel(here('analyze', 'input', file), skip=6) %>% 
+#   janitor::clean_names()
+# 
+# detainer_df<- detainer_df%>% 
+#   mutate(date_diff = difftime(detainer_prepare_date, apprehension_date, units = "days"))
+# 
+# detainer_ids <- unique(detainer_df$unique_identifier)
 
 ```
 
 ```{r setup_encounters, message=FALSE, warning=FALSE, include=TRUE}
 
-file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Encounters_FINAL_unprotected.xlsx"
-
-encounter_df_1 <- read_excel(here('analyze', 'input', file), sheet=1, skip=6) %>% 
-  janitor::clean_names() %>% 
-  mutate(event_date = as.Date(event_date))
-
-encounter_df_2 <- read_excel(here('analyze', 'input', file), sheet=2, skip=6) %>% 
-  janitor::clean_names() %>% 
-  mutate(event_date = as.Date(event_date))
-
-encounter_df <- rbind(encounter_df_1, encounter_df_2)
-
-rm(encounter_df_1, encounter_df_2)
-
-encounter_ids <- unique(encounter_df$unique_identifier)
+# file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Encounters_FINAL_unprotected.xlsx"
+# 
+# encounter_df_1 <- read_excel(here('analyze', 'input', file), sheet=1, skip=6) %>% 
+#   janitor::clean_names() %>% 
+#   mutate(event_date = as.Date(event_date))
+# 
+# encounter_df_2 <- read_excel(here('analyze', 'input', file), sheet=2, skip=6) %>% 
+#   janitor::clean_names() %>% 
+#   mutate(event_date = as.Date(event_date))
+# 
+# encounter_df <- rbind(encounter_df_1, encounter_df_2)
+# 
+# rm(encounter_df_1, encounter_df_2)
+# 
+# encounter_ids <- unique(encounter_df$unique_identifier)
 
 ```
 
@@ -72,7 +72,7 @@ arrest_df <- arrest_df %>%
   mutate(apprehension_method = fct(apprehension_method)) |>
   mutate(criminality = apprehension_criminality == "1 Convicted Criminal") |>
   mutate(n_dupe = row_number(), .by = c("apprehension_date", "apprehension_method", "apprehension_criminality", "unique_identifier")) |>
-  filter(is.na(unique_identifier) | n_dupe == 1)
+  filter(!is.na(unique_identifier))
 
 arrest_ids <- unique(arrest_df$unique_identifier)
 
@@ -89,7 +89,7 @@ detention_df <- read_delim(here('analyze', 'input', file), delim='|') %>%
          stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
          stay_book_out_date = ymd(stay_book_out_date),
          book_in_fy = substr(quarter(book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4),
-         stay_book_in_fy = substr(quarter(stay_book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4))
+         stay_book_in_fy = substr(quarter(stay_book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4)) %>% filter(!is.na(unique_identifier))
 
 
 detention_df <- detention_df %>% 
@@ -106,25 +106,9 @@ detention_ids <- unique(detention_df$unique_identifier)
 file <- "2025-ICLI-00019_2024-ICFO-39357_ICE_Removals_LESA-STU_FINAL_2025only_unprotected.xlsx"
 
 removals_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
-  janitor::clean_names()
+  janitor::clean_names() %>% filter(!is.na(unique_identifier))
 
 removal_ids <- unique(removals_df$unique_identifier)
-
-```
-
-```{r compare_sets}
-
-sets <- list("encounters" = encounter_ids,
-             "detainers" = detainer_ids,
-             "arrests" = arrest_ids,
-             "detentions" = detention_ids,
-             "removals" = removal_ids)
-
-vd1 <- ggVennDiagram(x = sets,
-              force_upset = TRUE, order.set.by = "name", order.intersect.by = "size"
-              )
-
-vd1 
 
 ```
 
@@ -132,22 +116,17 @@ vd1
 
 detention_df <- detention_df %>%
   mutate(id_in_arrests = unique_identifier %in% arrest_ids,
-         id_in_detainers = unique_identifier %in% detainer_ids,
+         # id_in_detainers = unique_identifier %in% detainer_ids,
          id_in_removals = unique_identifier %in% removal_ids)
 
 arrest_df <- arrest_df |>
   mutate(id_in_detentions = unique_identifier %in% detention_ids,
-         id_in_detainers = unique_identifier %in% detainer_ids,
-         id_in_removals = unique_identifier %in% removal_ids)
-
-detainer_df<- detainer_df |>
-  mutate(id_in_arrests = unique_identifier %in% arrest_ids,
-         id_in_detainers = unique_identifier %in% detainer_ids,
+         # id_in_detainers = unique_identifier %in% detainer_ids,
          id_in_removals = unique_identifier %in% removal_ids)
 
 removals_df <- removals_df |>
   mutate(id_in_detentions = unique_identifier %in% detention_ids,
-         id_in_detainers = unique_identifier %in% detainer_ids,
+         # id_in_detainers = unique_identifier %in% detainer_ids,
          id_in_arrests = unique_identifier %in% arrest_ids)
 
 ```
@@ -183,6 +162,26 @@ p2
 
 ```
 
+```{r}
+
+arrests_subset <- arrest_df %>% 
+  dplyr::select(unique_identifier, citizenship_country, departure_country)
+
+removals_subset <- removals_df %>% 
+  dplyr::select(unique_identifier, citizenship_country, departure_country)
+
+compare_subsets <- inner_join(arrests_subset, removals_subset, by="unique_identifier", suffix = c(".arrests", ".removals"), relationship = "many-to-many")
+
+compare_subsets$citizenship_equal <- compare_subsets$citizenship_country.arrests == compare_subsets$citizenship_country.removals
+
+compare_subsets$departure_equal <- compare_subsets$departure_country.arrests == compare_subsets$departure_country.removals
+
+unequal_compare <- compare_subsets %>% 
+  filter(departure_equal != TRUE | citizenship_equal != TRUE)
+
+
+```
+
 # Arrests/removals
 
 ```{r national_arrests_removals}
@@ -200,9 +199,13 @@ dat2 <- removals_df %>%
 dat <- rbind(dat1, dat2)
 
 p1 <- dat %>% 
+  filter(week > "2023-08-28",
+         week < "2025-06-09") %>% 
   ggplot(aes(x=week, y=n, color=type)) +
   geom_line() +
-  ylim(0, NA)
+  ylim(0, NA) +
+  labs(title = "National weekly ICE arrests and removals",
+       caption = "Source: ICE data obtained by Deportation Data Project")
 
 p1
 
@@ -225,17 +228,23 @@ dat2 <- removals_df %>%
 dat <- rbind(dat1, dat2)
 
 p1 <- dat %>% 
+    filter(week > "2023-08-28",
+         week < "2025-06-09") %>% 
   ggplot(aes(x=week, y=n, color=type)) +
   geom_line() +
-  facet_wrap(~aor)
-  ylim(0, NA)
+  facet_wrap(~aor) +
+  ylim(0, NA) +
+  labs(title = "Weekly ICE arrests and removals by AOR")
 
 p1
 
 p1.1 <- dat %>% 
+    filter(week > "2023-08-28",
+         week < "2025-06-09") %>% 
   ggplot(aes(x=week, y=n, color=type)) +
   geom_line() +
-  facet_wrap(~aor, scales = "free_y")
+  facet_wrap(~aor, scales = "free_y") +
+  labs(title = "Weekly ICE arrests and removals by AOR")
 
 p1.1
 
@@ -246,7 +255,8 @@ Note `apprehension_aor` and `docket_aor` do not coincide.
 ```{r diff_arrests_removals}
 
 dat_wide <- pivot_wider(dat, id_cols=c("week", "aor"), names_from = "type", values_from = "n") %>% 
-  filter(week >= "2024-12-30") %>% 
+  filter(week >= "2024-12-30",
+         week < "2025-06-09") %>% 
   mutate(arrests_minus_removals = arrests - removals)
 
 p2 <- dat_wide %>% 
@@ -354,6 +364,7 @@ p1 <- dat_wide %>%
   ggplot(aes(x = week, y = pct_third_country)) +
   geom_line() +
   scale_y_continuous(labels = scales::percent) +
+  ylim(0, NA) +
   labs(title = "Third-country deportations as % of weekly total",
        subtitle = "Nationwide, since Jan. 2025",
        caption = "Source: ICE 'removals' dataset obtained by DDP")
@@ -384,6 +395,7 @@ p1 <- dat1_wide %>%
   ggplot(aes(x = week, y = pct_third_country)) +
   geom_line() +
   scale_y_continuous(labels = scales::percent) +
+  ylim(0, NA) +
   labs(title = "Third-country deportations as % of weekly total",
        subtitle = "Nationwide, since Nov. 2023",
        caption = "Source: ICE 'arrests' dataset obtained by DDP")
@@ -407,7 +419,7 @@ p1
 
 ```
 
-```{r pct_third_country_aor}
+```{r pct_third_country_docket_aor}
 
 dat <- removals_df %>% 
   mutate(week = floor_date(departed_date, "week", week_start = "Monday"),
@@ -422,11 +434,37 @@ dat_wide <- dat %>%
 
 p1 <- dat_wide %>% 
   ggplot(aes(x = week, y = pct_third_country)) +
-  geom_line() +
+  geom_col() +
   scale_y_continuous(labels = scales::percent) +
   labs(title = "Third-country deportations as % of weekly total",
        subtitle = "per Docket AOR, since Jan. 2025") +
   facet_wrap(~docket_aor)
+
+p1
+
+```
+
+```{r pct_third_country_apprehension_aor}
+
+dat <- arrest_df %>% 
+  filter(departed_date >= "2025-01-01") %>% 
+  mutate(week = floor_date(departed_date, "week", week_start = "Monday"),
+         apprehension_aor = str_replace(apprehension_aor, " Area of Responsibility", "")) %>% 
+  count(week, third_country_deport, apprehension_aor) %>% 
+  mutate(type = "national")
+
+dat_wide <- dat %>% 
+  pivot_wider(id_cols = c("week", "apprehension_aor"), names_from = "third_country_deport", names_prefix = "third_country_", values_from = "n") %>% 
+  group_by(week, apprehension_aor) %>% 
+  mutate(pct_third_country = third_country_TRUE / sum(third_country_TRUE, third_country_FALSE))
+
+p1 <- dat_wide %>% 
+  ggplot(aes(x = week, y = pct_third_country)) +
+  geom_col() +
+  scale_y_continuous(labels = scales::percent) +
+  labs(title = "Third-country deportations as % of weekly total",
+       subtitle = "per Apprehension AOR, since Jan. 2025") +
+  facet_wrap(~apprehension_aor)
 
 p1
 
@@ -531,6 +569,10 @@ p1.1 <- arrest_df %>%
 
 p1.1
 
+```
+
+```{r}
+
 p2 <- arrest_df %>% 
   mutate(yearmon = as.yearmon(departed_date)) %>% 
   filter(yearmon >= as.yearmon("2025-01-01"),
@@ -577,14 +619,5 @@ p2.1 <- removals_df %>%
   geom_line()
 
 p2.1
-
-```
-
-```{r join_arrests_removals}
-
-arrests_w_removal_data <- arrest_df %>% 
-  filter(!is.na(departure_country))
-
-
 
 ```
