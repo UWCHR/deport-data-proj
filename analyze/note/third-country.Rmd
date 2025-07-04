@@ -71,7 +71,7 @@ arrest_df <- arrest_df %>%
   mutate(apprehension_date = as.Date(apprehension_date)) |>
   mutate(apprehension_method = fct(apprehension_method)) |>
   mutate(criminality = apprehension_criminality == "1 Convicted Criminal") |>
-  mutate(n_dupe = row_number(), .by = c("apprehension_date", "apprehension_method", "apprehension_criminality", "unique_identifier")) |>
+  mutate(n_dupe = row_number(), .by = c("unique_identifier")) |>
   filter(!is.na(unique_identifier))
 
 arrest_ids <- unique(arrest_df$unique_identifier)
@@ -325,7 +325,7 @@ third_country_ids <- unlist(union(third_country_ids, detention_third_country_ids
 ```{r removals_df_only}
 
 removals_df <- removals_df %>% 
-  mutate(third_country_deport = unique_identifier %in% third_country_ids)
+  mutate(third_country_deport = citizenship_country != departure_country)
 
 p1 <- removals_df %>% 
   mutate(yearmon = as.yearmon(departed_date)) %>% 
@@ -358,7 +358,7 @@ dat_wide <- dat %>%
   pivot_wider(id_cols = c("week"), names_from = "third_country_deport", names_prefix = "third_country_", values_from = "n") %>% 
   group_by(week) %>% 
   mutate(pct_third_country = third_country_TRUE / sum(third_country_TRUE, third_country_FALSE),
-         type = "removals dataset")
+         source = "removals dataset")
 
 p1 <- dat_wide %>% 
   ggplot(aes(x = week, y = pct_third_country)) +
@@ -376,20 +376,20 @@ p1
 ```{r pct_third_country_natl_via_arrests}
 
 arrest_df <- arrest_df %>% 
-  mutate(third_country_deport = unique_identifier %in% third_country_ids)
+  mutate(third_country_deport = citizenship_country != departure_country)
 
 dat1 <- arrest_df %>% 
   filter(!is.na(departure_country),
     departed_date >= "2023-11-01") %>% 
   mutate(week = floor_date(departed_date, "week", week_start = "Monday")) %>% 
   count(week, third_country_deport) %>% 
-  mutate(type = "arrests dataset")
+  mutate(source = "arrests dataset")
 
 dat1_wide <- dat1 %>% 
   pivot_wider(id_cols = c("week"), names_from = "third_country_deport", names_prefix = "third_country_", values_from = "n") %>% 
   group_by(week) %>% 
   mutate(pct_third_country = third_country_TRUE / sum(third_country_TRUE, third_country_FALSE),
-         type = "national_via_arrests")
+         source = "arrests dataset")
 
 p1 <- dat1_wide %>% 
   ggplot(aes(x = week, y = pct_third_country)) +
@@ -409,7 +409,7 @@ p1
 compare_dat <- rbind(dat_wide, dat1_wide)
 
 p1 <- compare_dat %>% 
-  ggplot(aes(x = week, y = pct_third_country, color = type)) +
+  ggplot(aes(x = week, y = pct_third_country, color = source)) +
   geom_line() +
   scale_y_continuous(labels = scales::percent) +
   labs(title = "Third-country deportations as % of weekly total",
@@ -442,6 +442,15 @@ p1 <- dat_wide %>%
 
 p1
 
+p1.1 <- dat_wide %>% 
+  ggplot(aes(x = week, y = third_country_TRUE)) +
+  geom_col() +
+  labs(title = "Third-country deportations weekly total",
+       subtitle = "per Docket AOR, since Jan. 2025") +
+  facet_wrap(~docket_aor)
+
+p1.1
+
 ```
 
 ```{r pct_third_country_apprehension_aor}
@@ -467,6 +476,15 @@ p1 <- dat_wide %>%
   facet_wrap(~apprehension_aor)
 
 p1
+
+p1.1 <- dat_wide %>% 
+  ggplot(aes(x = week, y = third_country_TRUE)) +
+  geom_col() +
+  labs(title = "Third-country deportations weekly total",
+       subtitle = "per Apprehension AOR, since Jan. 2025") +
+  facet_wrap(~apprehension_aor)
+
+p1.1
 
 ```
 
@@ -539,7 +557,7 @@ tab2 <- seattle_third_country_removals %>%
   count(citizenship_country, departure_country) %>% 
   arrange(desc(n))
 
-knitr::kable(head(tab2, 10))
+knitr::kable(head(tab2, 50))
 
 ```
 

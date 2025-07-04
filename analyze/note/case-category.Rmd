@@ -32,7 +32,7 @@ arrest_df <- arrest_df %>%
   mutate(apprehension_date = as.Date(apprehension_date)) |>
   # mutate(apprehension_method = fct(apprehension_method)) |>
   mutate(criminality = apprehension_criminality == "1 Convicted Criminal") |>
-  mutate(n_dupe = row_number(), .by = c("apprehension_date", "apprehension_method", "apprehension_criminality", "unique_identifier")) |>
+  mutate(n_dupe = row_number(), .by = c("unique_identifier")) |>
   filter(!is.na(unique_identifier))
 
 arrest_ids <- unique(arrest_df$unique_identifier)
@@ -46,6 +46,7 @@ file <- "2025-ICLI-00019_2024-ICFO-39357_ICE_Removals_LESA-STU_FINAL_2025only_un
 
 removals_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
   janitor::clean_names() %>% 
+  mutate(n_dupe = row_number(), .by = c("unique_identifier")) %>% 
   filter(!is.na(unique_identifier))
 
 removal_ids <- unique(removals_df$unique_identifier)
@@ -190,10 +191,10 @@ plotly::ggplotly(p1)
 ```{r}
 
 arrests_subset <- arrest_df %>% 
-  dplyr::select(unique_identifier, case_status, case_category)
+  dplyr::select(unique_identifier, case_status, case_category, n_dupe)
 
 removals_subset <- removals_df %>% 
-  dplyr::select(unique_identifier, case_status, case_category)
+  dplyr::select(unique_identifier, case_status, case_category, n_dupe)
 
 compare_subsets <- inner_join(arrests_subset, removals_subset, by="unique_identifier", suffix = c(".arrests", ".removals"), relationship = "many-to-many")
 
@@ -203,6 +204,12 @@ compare_subsets$category_equal <- compare_subsets$case_category.arrests == compa
 
 unequal_compare <- compare_subsets %>% 
   filter(status_equal != TRUE | category_equal != TRUE)
+
+unequal_status <- compare_subsets %>% 
+  filter(status_equal != TRUE)
+
+unequal_category <- compare_subsets %>% 
+  filter(category_equal != TRUE)
 
 ```
 

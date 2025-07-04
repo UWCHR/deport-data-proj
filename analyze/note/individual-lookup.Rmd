@@ -1,0 +1,157 @@
+---
+title: "Lookup and summary of individual case records across datasets"
+author: "UWCHR"
+date: "2025-07-03"
+output:
+    html_document:
+        html_preview: true
+        toc: true
+        toc_depth: 3
+        toc_float: true
+        code_folding: hide
+---
+
+```{r setup, message=FALSE, warning=FALSE, include=TRUE}
+
+options(scipen = 1000000)
+
+library(pacman)
+
+p_load(here, tidyverse, zoo, lubridate, ggplot2, ggforce, plotly, gghighlight, viridis, readxl, ggVennDiagram)
+
+```
+
+```{r setup_detainers, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Detainers_LESA-STU_FINAL_unprotected.xlsx"
+
+detainer_df<- read_excel(here('analyze', 'input', file), skip=6) %>%
+  janitor::clean_names()
+
+detainer_df<- detainer_df%>%
+  mutate(date_diff = difftime(detainer_prepare_date, apprehension_date, units = "days"))
+
+detainer_ids <- unique(detainer_df$unique_identifier)
+
+```
+
+```{r setup_encounters, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Encounters_FINAL_unprotected.xlsx"
+
+encounter_df_1 <- read_excel(here('analyze', 'input', file), sheet=1, skip=6) %>%
+  janitor::clean_names() %>%
+  mutate(event_date = as.Date(event_date))
+
+encounter_df_2 <- read_excel(here('analyze', 'input', file), sheet=2, skip=6) %>%
+  janitor::clean_names() %>%
+  mutate(event_date = as.Date(event_date))
+
+encounter_df <- rbind(encounter_df_1, encounter_df_2)
+
+rm(encounter_df_1, encounter_df_2)
+
+encounter_ids <- unique(encounter_df$unique_identifier)
+
+```
+
+```{r setup_arrests, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests_LESA-STU_FINAL_unprotected.xlsx"
+
+arrest_df<- read_excel(here('analyze', 'input', file), skip=5) %>% 
+  janitor::clean_names()
+
+arrest_df <- arrest_df %>% 
+  mutate(apprehension_date = as.Date(apprehension_date)) |>
+  mutate(apprehension_method = fct(apprehension_method)) |>
+  mutate(criminality = apprehension_criminality == "1 Convicted Criminal") |>
+  mutate(n_dupe = row_number(), .by = c("unique_identifier")) |>
+  filter(!is.na(unique_identifier))
+
+arrest_ids <- unique(arrest_df$unique_identifier)
+
+```
+
+```{r setup_detention, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "ice_detentions_nov23-jun25.csv.gz"
+
+detention_df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
+  mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
+         book_in_date_time = ymd_hms(book_in_date_time),
+         detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
+         stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
+         stay_book_out_date = ymd(stay_book_out_date),
+         book_in_fy = substr(quarter(book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4),
+         stay_book_in_fy = substr(quarter(stay_book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4)) %>% filter(!is.na(unique_identifier))
+
+
+detention_df <- detention_df %>% 
+  group_by(unique_identifier) %>% 
+  arrange(stay_book_in_date_time, book_in_date_time, unique_identifier) %>% 
+  ungroup()
+
+detention_ids <- unique(detention_df$unique_identifier)
+
+```
+
+```{r setup_removals, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "2025-ICLI-00019_2024-ICFO-39357_ICE_Removals_LESA-STU_FINAL_2025only_unprotected.xlsx"
+
+removals_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
+  janitor::clean_names() %>% filter(!is.na(unique_identifier))
+
+removal_ids <- unique(removals_df$unique_identifier)
+
+```
+
+Tuan Phan: 2b523cdad2a0705f5f06c4a1860c606e439c8abe
+
+```{r}
+
+id_lookup <- function(unique_identifier, dataset, output = FALSE) {
+  
+  records <- dataset[dataset$unique_identifier == unique_identifier,]
+  
+  if (output == "kable" | output == TRUE) {
+    knitr::kable(records)
+  } else if (output == "df" | output == FALSE) {
+    records
+  }
+  
+}
+
+```
+
+```{r}
+
+id_lookup("2b523cdad2a0705f5f06c4a1860c606e439c8abe", arrest_df, output="kable")
+
+```
+
+```{r}
+
+id_lookup("2b523cdad2a0705f5f06c4a1860c606e439c8abe", encounter_df, output=FALSE)
+
+```
+
+```{r}
+
+datasets <- c(encounter_df, detainer_df, arrest_df, detention_df, removals_df)
+
+lookup_all <- function(lookup_id, datasets) {
+  
+  records <- id_lookup(lookup_id, encounter_df)
+  
+  # for (n in 1:length(datasets)) {
+  #   print(id_lookup(unique_identifier, dataset[n]))
+  # }
+  
+}
+
+temp <- lookup_all("2b523cdad2a0705f5f06c4a1860c606e439c8abe", datasets)
+
+```
+
