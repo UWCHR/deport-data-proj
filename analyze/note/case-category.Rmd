@@ -21,6 +21,8 @@ p_load(here, tidyverse, zoo, lubridate, ggplot2, ggforce, plotly, gghighlight, v
 
 ```
 
+Note arrests includes only ICE arrests.
+
 ```{r setup_arrests, message=FALSE, warning=FALSE, include=TRUE}
 
 file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests_LESA-STU_FINAL_unprotected.xlsx"
@@ -37,8 +39,13 @@ arrest_df <- arrest_df %>%
 
 arrest_ids <- unique(arrest_df$unique_identifier)
 
+latest_arrest <- arrest_df %>% 
+  arrange(desc(apprehension_date)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE)
+
 ```
 
+Note removals includes ICE arrests and CBP apprehensions.
 
 ```{r setup_removals, message=FALSE, warning=FALSE, include=TRUE}
 
@@ -55,6 +62,26 @@ removal_statuses <- unique(removals_df$case_status)
 
 ```
 
+```{r plot_id_time}
+
+arrests_2025 <- latest_arrest %>% 
+  filter(departed_date >= "2025-01-01",
+         !is.na(departed_date))
+
+removal_ids <- unique(removals_df$unique_identifier)
+arrest_ids <- unique(arrests_2025$unique_identifier)
+
+sets <- list("arrests" = arrest_ids,
+             "removals" = removal_ids)
+
+vd1 <- ggVennDiagram(x = sets,
+              force_upset = TRUE, order.set.by = "name", order.intersect.by = "size"
+              )
+
+vd1 
+
+```
+
 ```{r}
 
 # Essentially all arrests with a status indicating removal have a departed date, departure country
@@ -62,6 +89,7 @@ arrests_with_removal <- arrest_df %>%
   filter(case_status %in% removal_statuses)
 
 # ...and vice versa. So can use any of these vars to identify removals within arrests data
+# OJO! Arrests here are only ICE arrests; versus BP arrests included in removals data
 arrests_without_removal <- arrest_df %>% 
   filter(!case_status %in% removal_statuses)
 
@@ -69,16 +97,17 @@ arrests_without_removal <- arrest_df %>%
 
 ```{r}
 
-dat <- arrest_df %>% 
+dat <- latest_arrest %>% 
   filter(case_status %in% removal_statuses) %>% 
   mutate(month = floor_date(departed_date, "month")) %>% 
   count(month, case_category)
   
 p1 <- dat %>% 
-  filter(month >= "2023-11-01",
+  filter(month >= "2023-10-01",
          month < "2025-05-01") %>% 
   ggplot(aes(x = month, y = n, color = case_category)) +
-  geom_line()
+  geom_line() +
+  labs(title = "Arrests with removal data")
 
 plotly::ggplotly(p1)
 
@@ -87,6 +116,7 @@ plotly::ggplotly(p1)
 ```{r}
 
 dat <- removals_df %>% 
+  # filter(final_program_code != "BP") %>% 
   mutate(month = floor_date(departed_date, "month")) %>% 
   count(month, case_category)
   
@@ -94,7 +124,8 @@ p1 <- dat %>%
   filter(month >= "2023-11-01",
          month < "2025-05-01") %>% 
   ggplot(aes(x = month, y = n, color = case_category)) +
-  geom_line()
+  geom_line() +
+  labs(title = "Removals data")
 
 plotly::ggplotly(p1)
 
@@ -143,20 +174,23 @@ benefit <- c('5C', '5D')
 expedited_admin_rein <- c('8F', '8G', '8H', '8I', '11', '16')
 
 dat <- removals_df %>% 
-  filter(docket_aor == "Seattle Area of Responsibility") %>% 
   mutate(month = floor_date(departed_date, "month"),
+         docket_aor = str_replace(docket_aor, " Area of Responsibility", ""),
          case_category_group = case_when(str_detect(case_category, paste0(pending, collapse="|")) ~ "pending case",
                                          str_detect(case_category, paste0(benefit, collapse="|")) ~ "benefit blocking deport",
                                          str_detect(case_category, paste0(expedited_admin_rein, collapse="|")) ~ "lack of due process",
                                          TRUE ~ "all other categories"
                                          )) %>% 
-  count(month, case_category_group)
+  count(month, docket_aor, case_category_group) %>% 
+  group_by(month, docket_aor) %>% 
+  mutate(pct = n / sum(n))
   
 p1 <- dat %>% 
   filter(month >= "2023-11-01",
          month < "2025-06-01") %>% 
-  ggplot(aes(x = month, y = n, fill = case_category_group)) +
-  geom_col()
+  ggplot(aes(x = month, y = pct, fill = case_category_group)) +
+  geom_col() +
+  facet_wrap(~docket_aor)
 
 plotly::ggplotly(p1)
 
@@ -168,7 +202,66 @@ pending <- c('2A', '2B', '8A', '8B', '8D')
 benefit <- c('5C', '5D')
 expedited_admin_rein <- c('8F', '8G', '8H', '8I', '11', '16')
 
-dat <- arrest_df %>% 
+dat_natl <- removals_df %>% 
+  mutate(month = floor_date(departed_date, "month"),
+         docket_aor = str_replace(docket_aor, " Area of Responsibility", ""),
+         case_category_group = case_when(str_detect(case_category, paste0(pending, collapse="|")) ~ "pending case",
+                                         str_detect(case_category, paste0(benefit, collapse="|")) ~ "benefit blocking deport",
+                                         str_detect(case_category, paste0(expedited_admin_rein, collapse="|")) ~ "lack of due process",
+                                         TRUE ~ "all other categories"
+                                         )) %>% 
+  count(month, case_category_group) %>% 
+  group_by(month) %>% 
+  mutate(pct = n / sum(n),
+         type = "natl")
+
+dat_sea <- removals_df %>% 
+  filter(docket_aor == "Seattle Area of Responsibility") %>% 
+  mutate(month = floor_date(departed_date, "month"),
+         case_category_group = case_when(str_detect(case_category, paste0(pending, collapse="|")) ~ "pending case",
+                                         str_detect(case_category, paste0(benefit, collapse="|")) ~ "benefit blocking deport",
+                                         str_detect(case_category, paste0(expedited_admin_rein, collapse="|")) ~ "lack of due process",
+                                         TRUE ~ "all other categories"
+                                         )) %>% 
+  count(month, case_category_group) %>% 
+  group_by(month) %>% 
+  mutate(pct = n / sum(n),
+         type = "sea")
+
+dat <- rbind(dat_natl, dat_sea)
+  
+p1 <- dat %>% 
+  filter(month >= "2023-11-01",
+         month < "2025-06-01") %>% 
+  ggplot(aes(x = month, y = pct, fill = case_category_group)) +
+  geom_col() +
+  facet_wrap(~type)
+
+plotly::ggplotly(p1)
+
+```
+
+
+
+```{r}
+
+pending <- c('2A', '2B', '8A', '8B', '8D')
+benefit <- c('5C', '5D')
+expedited_admin_rein <- c('8F', '8G', '8H', '8I', '11', '16')
+
+dat_natl <- arrest_df %>% 
+  mutate(month = floor_date(departed_date, "month"),
+         case_category_group = case_when(str_detect(case_category, paste0(pending, collapse="|")) ~ "pending case",
+                                         str_detect(case_category, paste0(benefit, collapse="|")) ~ "benefit blocking deport",
+                                         str_detect(case_category, paste0(expedited_admin_rein, collapse="|")) ~ "lack of due process",
+                                         TRUE ~ "all other categories"
+                                         )) %>% 
+  count(month, case_category_group) %>% 
+  group_by(month) %>% 
+  mutate(pct = n / sum(n),
+         type = "natl")
+
+dat_sea <- arrest_df %>% 
   filter(apprehension_aor == "Seattle Area of Responsibility") %>% 
   mutate(month = floor_date(departed_date, "month"),
          case_category_group = case_when(str_detect(case_category, paste0(pending, collapse="|")) ~ "pending case",
@@ -176,15 +269,22 @@ dat <- arrest_df %>%
                                          str_detect(case_category, paste0(expedited_admin_rein, collapse="|")) ~ "lack of due process",
                                          TRUE ~ "all other categories"
                                          )) %>% 
-  count(month, case_category_group)
+  count(month, case_category_group) %>% 
+  group_by(month) %>% 
+  mutate(pct = n / sum(n),
+         type = "sea")
+
+dat <- rbind(dat_natl, dat_sea)
   
 p1 <- dat %>% 
   filter(month >= "2023-11-01",
          month < "2025-06-01") %>% 
-  ggplot(aes(x = month, y = n, fill = case_category_group)) +
-  geom_col()
+  ggplot(aes(x = month, y = pct, fill = case_category_group)) +
+  geom_col() +
+  facet_wrap(~type, scales = "free_y")
 
 plotly::ggplotly(p1)
+
 
 ```
 
