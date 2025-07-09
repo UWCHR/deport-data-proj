@@ -18,13 +18,35 @@ options(scipen = 1000000)
 
 library(pacman)
 
-p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, ggVennDiagram)
+p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, ggVennDiagram, UpSetR)
 
 ```
 
+
+```{r setup_encounters, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Encounters_FINAL_unprotected.xlsx"
+
+encounter_df_1 <- read_excel(here('analyze', 'input', file), sheet=1, skip=6) %>%
+  janitor::clean_names() %>%
+  mutate(event_date = as.Date(event_date))
+
+encounter_df_2 <- read_excel(here('analyze', 'input', file), sheet=2, skip=6) %>%
+  janitor::clean_names() %>%
+  mutate(event_date = as.Date(event_date))
+
+encounter_df <- rbind(encounter_df_1, encounter_df_2)
+
+rm(encounter_df_1, encounter_df_2)
+
+encounter_ids <- unique(encounter_df$unique_identifier)
+
+```
+
+
 ```{r setup_detainers}
 
-file <- "2025-ICLI-00019_2024-ICFO-39357_ERO Detainers_LESA-STU_FINAL_unprotected.xlsx"
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Detainers_LESA-STU_FINAL_unprotected.xlsx"
 
 detainer_df<- read_excel(here('analyze', 'input', file), skip=6) %>% 
   janitor::clean_names()
@@ -36,29 +58,9 @@ detainer_ids <- unique(detainer_df$unique_identifier)
 
 ```
 
-```{r setup_encounters}
+```{r setup_arrests, message=FALSE, warning=FALSE, include=TRUE}
 
-file <- "2025-ICLI-00019_2024-ICFO-39357_ERO Encounters_FINAL_unprotected.xlsx"
-
-encounter_df_1 <- read_excel(here('analyze', 'input', file), sheet=1, skip=6) %>% 
-  janitor::clean_names() %>% 
-  mutate(event_date = as.Date(event_date))
-
-encounter_df_2 <- read_excel(here('analyze', 'input', file), sheet=2, skip=6) %>% 
-  janitor::clean_names() %>% 
-  mutate(event_date = as.Date(event_date))
-
-encounter_df <- rbind(encounter_df_1, encounter_df_2)
-
-rm(encounter_df_1, encounter_df_2)
-
-encounter_ids <- unique(encounter_df$unique_identifier)
-
-```
-
-```{r setup_arrests}
-
-file <- "2025-ICLI-00019_2024-ICFO-39357_ERO Admin Arrests_LESA-STU_FINAL_unprotected.xlsx"
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests_LESA-STU_FINAL_unprotected.xlsx"
 
 arrest_df<- read_excel(here('analyze', 'input', file), skip=5) %>% 
   janitor::clean_names()
@@ -67,53 +69,47 @@ arrest_df <- arrest_df %>%
   mutate(apprehension_date = as.Date(apprehension_date)) |>
   mutate(apprehension_method = fct(apprehension_method)) |>
   mutate(criminality = apprehension_criminality == "1 Convicted Criminal") |>
-  mutate(n_dupe = row_number(), .by = c("apprehension_date", "apprehension_method", "apprehension_criminality", "unique_identifier")) |>
-  filter(is.na(unique_identifier) | n_dupe == 1)
+  mutate(n_dupe = row_number(), .by = c("unique_identifier")) |>
+  filter(!is.na(unique_identifier))
 
 arrest_ids <- unique(arrest_df$unique_identifier)
 
 ```
 
-```{r setup_detention}
+```{r setup_detention, message=FALSE, warning=FALSE, include=TRUE}
 
-file <- "2025-ICLI-00019_2024-ICFO-39357_ICE Detentions_LESA-STU_FINAL_unprotected.xlsx"
+file <- "ice_detentions_nov23-jun25.csv.gz"
 
-detention_df_1 <- read_excel(here('analyze', 'input', file), sheet=1, skip=6) %>% 
-  janitor::clean_names() %>% 
-  mutate(stay_book_in_date_time = as.Date(stay_book_in_date_time, format = "%m/%d/%Y %H:%M"),
-         book_in_date_time = as.Date(book_in_date_time, format = "%m/%d/%Y %H:%M"),
-         stay_book_out_date_time = as.Date(stay_book_out_date_time, format = "%m/%d/%Y %H:%M"),
-         stay_book_in_date_time = as.Date(stay_book_out_date, format = "%m/%d/%Y %H:%M"),
+detention_df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
+  mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
+         book_in_date_time = ymd_hms(book_in_date_time),
+         detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
+         stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
+         stay_book_out_date = ymd(stay_book_out_date),
          book_in_fy = substr(quarter(book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4),
-         stay_book_in_fy = substr(quarter(stay_book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4))
+         stay_book_in_fy = substr(quarter(stay_book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4)) %>% filter(!is.na(unique_identifier))
 
-detention_df_2 <- read_excel(here('analyze', 'input', file), sheet=2, skip=6) %>% 
-  janitor::clean_names() %>% 
-  mutate(stay_book_in_date_time = as.Date(stay_book_in_date_time, format = "%m/%d/%Y %H:%M"),
-         book_in_date_time = as.Date(book_in_date_time, format = "%m/%d/%Y %H:%M"),
-         stay_book_out_date_time = as.Date(stay_book_out_date_time, format = "%m/%d/%Y %H:%M"),
-         stay_book_in_date_time = as.Date(stay_book_out_date, format = "%m/%d/%Y %H:%M"),
-         book_in_fy = substr(quarter(book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4),
-         stay_book_in_fy = substr(quarter(stay_book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4))
 
-detention_df <- rbind(detention_df_1, detention_df_2)
-
-rm(detention_df_1, detention_df_2)
+detention_df <- detention_df %>% 
+  group_by(unique_identifier) %>% 
+  arrange(stay_book_in_date_time, book_in_date_time, unique_identifier) %>% 
+  ungroup()
 
 detention_ids <- unique(detention_df$unique_identifier)
 
 ```
 
-```{r setup_removals}
+```{r setup_removals, message=FALSE, warning=FALSE, include=TRUE}
 
-file <- "2025-ICLI-00019_2024-ICFO-39357_ICE Removals_LESA-STU_FINAL_2025only_unprotected.xlsx"
+file <- "2025-ICLI-00019_2024-ICFO-39357_ICE_Removals_LESA-STU_FINAL_2025only_unprotected.xlsx"
 
 removals_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
-  janitor::clean_names()
+  janitor::clean_names() %>% filter(!is.na(unique_identifier))
 
 removal_ids <- unique(removals_df$unique_identifier)
 
 ```
+
 
 ```{r compare_sets}
 
@@ -135,32 +131,5 @@ p2 <- ggVennDiagram(x = sets,
               )
 
 p2 
-
-```
-
-```{r setup_id_intersect_cols}
-
-detention_df <- detention_df |>
-  mutate(id_in_arrests = unique_identifier %in% arrest_ids,
-         id_in_detainers = unique_identifier %in% detainer_ids)
-
-arrest_df<- arrest_df|>
-  mutate(id_in_detentions = unique_identifier %in% detention_ids,
-         id_in_detainers = unique_identifier %in% detainer_ids)
-
-detainer_df<- detainer_df|>
-  mutate(id_in_arrests = unique_identifier %in% arrest_ids,
-         id_in_detainers = unique_identifier %in% detainer_ids)
-
-```
-
-```{r}
-
-dat <- detention_df %>% 
-  mutate(fy = substr(quarter(book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4)) %>% 
-  group_by(fy) %>% 
-  summarize(id_in_arrests_mean = mean(id_in_arrests))
-
-dat
 
 ```
