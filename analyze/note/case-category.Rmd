@@ -32,7 +32,7 @@ arrest_df<- read_excel(here('analyze', 'input', file), skip=5) %>%
 
 arrest_df <- arrest_df %>% 
   mutate(apprehension_date = as.Date(apprehension_date)) |>
-  # mutate(apprehension_method = fct(apprehension_method)) |>
+  mutate(apprehension_method = fct(apprehension_method)) |>
   mutate(criminality = apprehension_criminality == "1 Convicted Criminal") |>
   mutate(n_dupe = row_number(), .by = c("unique_identifier")) |>
   filter(!is.na(unique_identifier))
@@ -45,7 +45,7 @@ latest_arrest <- arrest_df %>%
 
 ```
 
-Note removals includes ICE arrests and CBP apprehensions.
+Note removals includes ICE and CBP apprehensions, shorter timeline.
 
 ```{r setup_removals, message=FALSE, warning=FALSE, include=TRUE}
 
@@ -58,18 +58,22 @@ removals_df <- read_excel(here('analyze', 'input', file), skip=6) %>%
 
 removal_ids <- unique(removals_df$unique_identifier)
 
-removal_statuses <- unique(removals_df$case_status)
+latest_removal <- removals_df %>% 
+  arrange(desc(departed_date)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE)
 
 ```
 
+Here we examine the relationship of unique identifiers across datasets for arrest records with associated removals during 2025 (indicated by `departed_date` field) and removals records (by definition, removals occurring in 2025). A majority of unique identifier values are present in both datasets, indicating removals proceeding from ICE arrests. A sizeable minority are present in removals dataset only (likely indicating removals proceeding from arrests by CBP, not ICE; or from arrests which occurred prior to start of arrest dataset). A very small fraction are present in the arrests dataset only, likely indicating noise/errors in the data.
+
 ```{r plot_id_time}
 
-arrests_2025 <- latest_arrest %>% 
-  filter(departed_date >= "2025-01-01",
+arrests_removed_2025 <- latest_arrest %>% 
+  filter(departed_date > "2024-12-31",
          !is.na(departed_date))
 
 removal_ids <- unique(removals_df$unique_identifier)
-arrest_ids <- unique(arrests_2025$unique_identifier)
+arrest_ids <- unique(arrests_removed_2025$unique_identifier)
 
 sets <- list("arrests" = arrest_ids,
              "removals" = removal_ids)
@@ -82,23 +86,76 @@ vd1
 
 ```
 
-```{r}
+There is no obvious common pattern for small subset of arrest records indicating 2025 deportation which do not appear in removals dataset.
 
-# Essentially all arrests with a status indicating removal have a departed date, departure country
-arrests_with_removal <- arrest_df %>% 
-  filter(case_status %in% removal_statuses)
+```{r data_check}
 
-# ...and vice versa. So can use any of these vars to identify removals within arrests data
-# OJO! Arrests here are only ICE arrests; versus BP arrests included in removals data
-arrests_without_removal <- arrest_df %>% 
-  filter(!case_status %in% removal_statuses)
+arrests_removed_2025 <- arrests_removed_2025 %>% 
+  mutate(id_in_removals = unique_identifier %in% unique(removals_df$unique_identifier))
+
+data_check <- arrests_removed_2025 %>%
+  filter(id_in_removals == FALSE)
 
 ```
 
-```{r}
+Trends for total arrests and removals per month. Note shorter timeline of removals data compared to arrests data. Rates of removals consistently outpace rate of arrests.
+
+```{r national_arrests_removals}
+
+dat1 <- arrest_df %>% 
+  mutate(month = floor_date(apprehension_date, "month")) %>% 
+  count(month) %>% 
+  mutate(type = "arrests")
+
+dat2 <- removals_df %>% 
+  mutate(month = floor_date(departed_date, "month")) %>% 
+  count(month) %>% 
+  mutate(type = "removals")
+
+dat <- rbind(dat1, dat2)
+
+p1 <- dat %>% 
+  filter(
+         month < "2025-06-01") %>%
+  ggplot(aes(x=month, y=n, color=type)) +
+  geom_line() +
+  ylim(0, NA) +
+  labs(title = "National monthly ICE arrests and removals",
+       caption = "Source: ICE data obtained by Deportation Data Project")
+
+p1
+
+```
+
+# Analysis of `case_category` trends
+
+`case_category` values suggest disposition of immigration case at time of generation of record; see [Kerwin et al. (2015)](https://doi.org/10.1177/233150241500300402) for interpretation of codes.
+
+First we observe `case_category` trends for removals data. The data suggests that increase in removals from Jan. 2025 is primarily driven by people with final orders of removal, though expedited removals and reinstatements of removal trend up from April-May.
+
+```{r case_category_trend_removals}
+
+dat <- removals_df %>% 
+  mutate(month = floor_date(departed_date, "month")) %>% 
+  count(month, case_category)
+  
+p1 <- dat %>% 
+  filter(month >= "2023-11-01",
+         month < "2025-05-01") %>% 
+  ggplot(aes(x = month, y = n, color = case_category)) +
+  geom_line() +
+  labs(title = "Removals by `case_category`")
+
+plotly::ggplotly(p1)
+
+```
+
+We can also examine `case_category` trends for arrest records that include fields denoting a deportation. Note that this will only be representative of removals proceeding from ICE arrests. While specific trends differ (note different timeline for intersection of categories "[8C]" and "[16]" compared to above), overall trend is similar: increase in deportations of people with final orders; as well as increase in expedited removals and reinstatement of removal.
+
+```{r case_category_trend_arrests}
 
 dat <- latest_arrest %>% 
-  filter(case_status %in% removal_statuses) %>% 
+  filter(!is.na(departed_date)) %>% 
   mutate(month = floor_date(departed_date, "month")) %>% 
   count(month, case_category)
   
@@ -113,34 +170,20 @@ plotly::ggplotly(p1)
 
 ```
 
-```{r}
+## Seattle AOR trends
 
-dat <- removals_df %>% 
-  # filter(final_program_code != "BP") %>% 
-  mutate(month = floor_date(departed_date, "month")) %>% 
-  count(month, case_category)
-  
-p1 <- dat %>% 
-  filter(month >= "2023-11-01",
-         month < "2025-05-01") %>% 
-  ggplot(aes(x = month, y = n, color = case_category)) +
-  geom_line() +
-  labs(title = "Removals data")
-
-plotly::ggplotly(p1)
-
-```
+Here we observe `case_category` trends for Seattle Area of Responsibility arrests with associated removal data; these are similar to national trends above.
 
 ```{r}
 
 dat <- arrest_df %>% 
-  filter(case_status %in% removal_statuses,
+  filter(!is.na(departed_date),
          apprehension_aor == "Seattle Area of Responsibility") %>% 
   mutate(month = floor_date(departed_date, "month")) %>% 
   count(month, case_category)
   
 p1 <- dat %>% 
-  filter(month >= "2025-01-01",
+  filter(month >= "2023-10-01",
          month < "2025-05-01") %>% 
   ggplot(aes(x = month, y = n, color = case_category)) +
   geom_line()
@@ -148,6 +191,8 @@ p1 <- dat %>%
 plotly::ggplotly(p1)
 
 ```
+
+Here we observe `case_category` trends for removals with `docket_aor` equal to "Seattle Area of Responsibility"; these are similar to national trends above. See below for analysis of relationships between `apprehension_aor` and `docket_aor`; in majority of cases these coincide.
 
 ```{r}
 
@@ -166,6 +211,9 @@ plotly::ggplotly(p1)
 
 ```
 
+# Rights implications of `case_category` codes
+
+`case_category` codes can be tentatively parsed for implications for human rights and due process. Some categories (listed below) may indicate that individuals have pending cases before U.S. immigration courts, and therefore should not be subjected to deportation. Other categories of removals, including administrative deportations, expedited removal, and reinstatement of removal do not  
 
 ```{r}
 
@@ -288,6 +336,10 @@ plotly::ggplotly(p1)
 
 ```
 
+# Arrests X removals
+
+Minority (but not insignificant quantity) of unique ids appearing in both arrests and removals have inconsistent `case_status` and/or `case_category` values. This might not be unexpected if arrests and removals datasets were generated at different times.
+
 ```{r}
 
 arrests_subset <- arrest_df %>% 
@@ -313,4 +365,38 @@ unequal_category <- compare_subsets %>%
 
 ```
 
+No obvious relationship between arrest `apprehension_method` and removal `final_program`; this suggests `final_program` is not analogous to "arresting agency", at least in removals dataset.
 
+```{r}
+
+arrests_subset <- latest_arrest %>% 
+  dplyr::select(unique_identifier, apprehension_method)
+
+removals_subset <- latest_removal %>% 
+  dplyr::select(unique_identifier, final_program)
+
+dat <- inner_join(arrests_subset, removals_subset, by="unique_identifier", suffix = c(".arrests", ".removals"))
+
+t1 <- dat %>% 
+  count(apprehension_aor, docket_aor)
+
+
+```
+
+Usually consistent relationship between `apprehension_aor`, `docket_aor`.
+
+```{r}
+
+arrests_subset <- latest_arrest %>% 
+  dplyr::select(unique_identifier, apprehension_aor)
+
+removals_subset <- latest_removal %>% 
+  dplyr::select(unique_identifier, docket_aor)
+
+dat <- inner_join(arrests_subset, removals_subset, by="unique_identifier", suffix = c(".arrests", ".removals"))
+
+t1 <- dat %>% 
+  count(apprehension_aor, docket_aor)
+
+
+```
