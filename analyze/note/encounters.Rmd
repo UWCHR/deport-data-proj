@@ -24,15 +24,42 @@ p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, r
 
 ```{r setup_encounters}
 
-file <- "ERO Encounters_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Encounters_FINAL_unprotected.xlsx"
 
-encounter_df<- read_excel(here('analyze', 'input', file), skip=6) %>% 
-  janitor::clean_names() %>% 
-  mutate(event_date = as.Date(event_date, format="%m/%d/%Y"),
-         event_fy = substr(quarter(event_date, fiscal_start = 10, type = "year.quarter"), 1, 4),
-         event_yearmon = as.yearmon(event_date))
+encounter_df_1 <- read_excel(here('analyze', 'input', file), sheet=1, skip=6) %>%
+  janitor::clean_names() %>%
+  mutate(event_date = as.Date(event_date))
+
+encounter_df_2 <- read_excel(here('analyze', 'input', file), sheet=2, skip=6) %>%
+  janitor::clean_names() %>%
+  mutate(event_date = as.Date(event_date))
+
+encounter_df <- rbind(encounter_df_1, encounter_df_2)
+
+rm(encounter_df_1, encounter_df_2)
 
 encounter_ids <- unique(encounter_df$unique_identifier)
+
+encounter_df <- encounter_df %>% 
+  mutate(event_yearmon = as.yearmon(event_date))
+
+```
+
+```{r setup_arrests, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests_LESA-STU_FINAL_unprotected.xlsx"
+
+arrest_df<- read_excel(here('analyze', 'input', file), skip=5) %>% 
+  janitor::clean_names()
+
+arrest_df <- arrest_df %>% 
+  mutate(apprehension_date = as.Date(apprehension_date)) |>
+  mutate(apprehension_method = fct(apprehension_method)) |>
+  mutate(criminality = apprehension_criminality == "1 Convicted Criminal") |>
+  mutate(n_dupe = row_number(), .by = c("unique_identifier")) |>
+  filter(!is.na(unique_identifier))
+
+arrest_ids <- unique(arrest_df$unique_identifier)
 
 ```
 
@@ -117,5 +144,52 @@ p1 <- dat %>%
   geom_col()
 
 p1
+
+```
+
+```{r}
+
+temp <- encounter_df %>% 
+  mutate(id_in_arr = unique_identifier %in% arrest_ids) %>% 
+  filter(event_date >= "2025-04-21",
+         event_date <= "2025-04-26",
+         responsible_aor == "Miami Area of Responsibility")
+
+skimr::skim(temp)
+
+dat <- encounter_df %>% 
+  mutate(responsible_aor = str_replace(responsible_aor, " Area of Responsibility", "")) %>% 
+  filter(event_date >= "2025-04-21",
+         event_date <= "2025-04-26",
+         responsible_aor == "Miami")
+
+p1 <- dat %>% 
+  count(responsible_aor, event_date) %>% 
+  ggplot(aes(x = event_date, y = n, fill = responsible_aor)) +
+  geom_col() +
+  facet_wrap(~responsible_aor)
+
+p1
+
+dat2 <- dat %>% 
+  filter(responsible_aor %in% c("Miami", "Atlanta")) %>% 
+  count(responsible_aor, event_date)
+
+p2 <- dat2 %>% 
+  ggplot(aes(x= event_date, y = n, fill = responsible_aor)) +
+  geom_col()
+
+p2
+
+dat <- encounter_df %>% 
+  mutate(responsible_aor = str_replace(responsible_aor, " Area of Responsibility", ""))
+
+p3 <- dat %>% 
+  count(responsible_aor, event_yearmon) %>% 
+  ggplot(aes(x = event_yearmon, y = n, fill = responsible_aor)) +
+  geom_col() +
+  facet_wrap(~responsible_aor)
+
+p3
 
 ```

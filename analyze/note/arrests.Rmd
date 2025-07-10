@@ -501,3 +501,30 @@ p2 <- arr %>%
 p2
 
 ```
+
+```{r}
+
+dat <- arr %>% 
+  mutate(apprehension_aor = str_replace(apprehension_aor, " Area of Responsibility", "")) %>% 
+  filter(apprehension_date >= "2025-04-01",
+         apprehension_date <= "2025-04-30")
+
+p1 <- dat %>% 
+  count(apprehension_aor, apprehension_date) %>% 
+  ggplot(aes(x = apprehension_date, y = n, fill = apprehension_aor)) +
+  geom_col() +
+  facet_wrap(~apprehension_aor)
+
+p1
+
+dat2 <- dat %>% 
+  filter(apprehension_aor %in% c("Miami", "Atlanta")) %>% 
+  count(apprehension_aor, apprehension_date)
+
+p2 <- dat2 %>% 
+  ggplot(aes(x= apprehension_date, y = n, fill = apprehension_aor)) +
+  geom_col()
+
+p2
+
+```
