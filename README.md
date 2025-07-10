@@ -19,6 +19,7 @@ This project uses "Principled Data Processing" techniques and tools developed by
 The repository is divided into separate tasks which follow a regular structure; tasks are linked using symlinks and scripts are executed via Makefiles.
 
 - `import/` - Contains original Deportation Data Project Excel files in `import/input/`
+- `detain-concat/` - Concatenates individual Excel sheets for June 2025 detenion data, performs basic cleaning and parsing
 - `detain-unique-stays/` - Generates additional placement and stay-level analysis fields in detentions data
 - `detain-headcount/` - Calculates daily detention headcount by given characteristic
 - `analyze/` - Contains various analysis and prototyping notebooks
