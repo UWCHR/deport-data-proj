@@ -290,9 +290,9 @@ dat <- removals_df %>%
 p1 <- dat %>% 
   filter(month >= "2023-11-01",
          month < "2025-06-01") %>% 
-  ggplot(aes(x = month, y = pct, fill = case_category_group)) +
+  ggplot(aes(x = month, y = n, fill = case_category_group)) +
   geom_col() +
-  facet_wrap(~docket_aor)
+  facet_wrap(~docket_aor, scales="free_y")
 
 plotly::ggplotly(p1)
 
@@ -335,15 +335,48 @@ dat <- rbind(dat_natl, dat_sea)
 p1 <- dat %>% 
   filter(month >= "2023-11-01",
          month < "2025-06-01") %>% 
-  ggplot(aes(x = month, y = pct, fill = case_category_group)) +
+  ggplot(aes(x = month, y = n, fill = case_category_group)) +
   geom_col() +
-  facet_wrap(~type)
+  facet_wrap(~type, scales="free_y")
 
 plotly::ggplotly(p1)
 
 ```
 
+```{r}
 
+dat_natl <- arrest_df %>% 
+    filter(!is.na(departed_date),
+          departed_date > "2023-10-31") %>% 
+  mutate(month = floor_date(departed_date, "month")) %>% 
+  count(month, case_category) %>% 
+  group_by(month) %>% 
+  mutate(pct = n / sum(n),
+         type = "natl")
+
+dat_sea <- arrest_df %>% 
+    filter(!is.na(departed_date),
+          departed_date > "2023-10-31") %>% 
+  filter(apprehension_aor == "Seattle Area of Responsibility") %>% 
+  mutate(month = floor_date(departed_date, "month")) %>% 
+  count(month, case_category) %>% 
+  group_by(month) %>% 
+  mutate(pct = n / sum(n),
+         type = "sea")
+
+dat <- rbind(dat_natl, dat_sea)
+  
+p1 <- dat %>% 
+  filter(month >= "2023-11-01",
+         month < "2025-06-01") %>% 
+  ggplot(aes(x = month, y = n, fill = case_category)) +
+  geom_col() +
+  facet_wrap(~type, scales = "free_y")
+
+plotly::ggplotly(p1)
+
+
+```
 
 ```{r}
 
@@ -352,6 +385,8 @@ benefit <- c('5C', '5D')
 expedited_admin_rein <- c('8F', '8G', '8H', '8I', '11', '16')
 
 dat_natl <- arrest_df %>% 
+    filter(!is.na(departed_date),
+          departed_date > "2023-10-31") %>% 
   mutate(month = floor_date(departed_date, "month"),
          case_category_group = case_when(str_detect(case_category, paste0(pending, collapse="|")) ~ "pending case",
                                          str_detect(case_category, paste0(benefit, collapse="|")) ~ "benefit blocking deport",
@@ -364,6 +399,8 @@ dat_natl <- arrest_df %>%
          type = "natl")
 
 dat_sea <- arrest_df %>% 
+    filter(!is.na(departed_date),
+          departed_date > "2023-10-31") %>% 
   filter(apprehension_aor == "Seattle Area of Responsibility") %>% 
   mutate(month = floor_date(departed_date, "month"),
          case_category_group = case_when(str_detect(case_category, paste0(pending, collapse="|")) ~ "pending case",
@@ -381,7 +418,7 @@ dat <- rbind(dat_natl, dat_sea)
 p1 <- dat %>% 
   filter(month >= "2023-11-01",
          month < "2025-06-01") %>% 
-  ggplot(aes(x = month, y = pct, fill = case_category_group)) +
+  ggplot(aes(x = month, y = n, fill = case_category_group)) +
   geom_col() +
   facet_wrap(~type, scales = "free_y")
 
@@ -431,6 +468,8 @@ dat_sea <- arrest_df %>%
 
 dat <- rbind(dat_natl, dat_sea)
 
+plotly::ggplotly(p1)
+
 # Biden admin period
 d1 <- as.Date("2023-11-01")    
 d2 <- as.Date("2025-01-19")
@@ -450,6 +489,25 @@ tab <- dat %>%
          mean_Biden_sea = n_Biden_sea / biden_months,
          mean_Trump_sea = n_Trump_sea / trump_months)
 
+tab2 <- tab %>% 
+  group_by(case_category_group) %>% 
+  summarize(pct_Biden_natl = sum (pct_Biden_natl, na.rm=TRUE),
+            pct_Trump_natl = sum (pct_Trump_natl, na.rm=TRUE),
+            n_Biden_natl = sum (n_Biden_natl, na.rm=TRUE),
+            n_Trump_natl = sum (n_Trump_natl, na.rm=TRUE),
+            mean_Biden_natl = sum (mean_Biden_natl, na.rm=TRUE),
+            mean_Trump_natl = sum (mean_Trump_natl, na.rm=TRUE),
+            pct_Biden_sea = sum (pct_Biden_sea, na.rm=TRUE),
+            pct_Trump_sea = sum (pct_Trump_sea, na.rm=TRUE),
+            n_Biden_sea = sum (n_Biden_sea, na.rm=TRUE),
+            n_Trump_sea = sum (n_Trump_sea, na.rm=TRUE),
+            mean_Biden_sea = sum (mean_Biden_sea, na.rm=TRUE),
+            mean_Trump_sea = sum (mean_Trump_sea, na.rm=TRUE)
+            )
+
+write_csv(tab, here('analyze', 'output', 'case_category_tab.csv'), na = "")
+
+write_csv(tab2, here('analyze', 'output', 'case_category_tab2.csv'), na = "")
 ```
 
 
@@ -495,7 +553,7 @@ removals_subset <- latest_removal %>%
 dat <- inner_join(arrests_subset, removals_subset, by="unique_identifier", suffix = c(".arrests", ".removals"))
 
 t1 <- dat %>% 
-  count(apprehension_aor, docket_aor)
+  count(apprehension_method, final_program)
 
 
 ```
@@ -514,6 +572,44 @@ dat <- inner_join(arrests_subset, removals_subset, by="unique_identifier", suffi
 
 t1 <- dat %>% 
   count(apprehension_aor, docket_aor)
+
+
+```
+
+Inconsistent relationship between `final_program` values in arrests/removals
+
+```{r}
+
+arrests_subset <- latest_arrest %>% 
+  dplyr::select(unique_identifier, final_program)
+
+removals_subset <- latest_removal %>% 
+  dplyr::select(unique_identifier, final_program)
+
+dat <- inner_join(arrests_subset, removals_subset, by="unique_identifier", suffix = c(".arrests", ".removals"))
+
+t1 <- dat %>% 
+  count(final_program.arrests, final_program.removals)
+
+
+```
+
+```{r}
+
+arrests_subset <- latest_arrest %>% 
+  dplyr::select(unique_identifier, departed_date) %>% 
+  mutate(departed_date = as.Date(departed_date))
+
+removals_subset <- latest_removal %>% 
+  dplyr::select(unique_identifier, departed_date) %>% 
+  mutate(departed_date = as.Date(departed_date))
+
+
+dat <- inner_join(arrests_subset, removals_subset, by="unique_identifier", suffix = c(".arrests", ".removals")) %>% 
+  filter(!is.na(departed_date.arrests)) %>% 
+  mutate(unequal_departed_date = departed_date.arrests != departed_date.removals) 
+
+
 
 
 ```
