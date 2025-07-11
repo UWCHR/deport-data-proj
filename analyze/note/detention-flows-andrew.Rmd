@@ -25,7 +25,7 @@ p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, r
 ```{r setup_facilities, message=FALSE, warning=FALSE, include=TRUE}
 
 # Running into problem with .gz version of facilities dataset
-file <- "facilities.csv"
+file <- "facilities.csv.gz"
 
 facilities_df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
   janitor::clean_names()
@@ -34,7 +34,7 @@ facilities_df <- read_delim(here('analyze', 'input', file), delim='|') %>%
 
 ```{r setup_detainers, message=FALSE, warning=FALSE, include=TRUE}
 
-file <- "ERO_Detainers_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Detainers_LESA-STU_FINAL_unprotected.xlsx"
 
 detainer_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
   janitor::clean_names() %>% 
@@ -47,12 +47,22 @@ detainer_ids <- unique(detainer_df$unique_identifier)
 
 ```{r setup_encounters, message=FALSE, warning=FALSE, include=TRUE}
 
-file <- "ERO_Encounters_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Encounters_FINAL_unprotected.xlsx"
 
-encounter_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
-  janitor::clean_names() %>% 
-  mutate(event_date = as.Date(event_date),
-         pre_trump = event_date < as.Date("2025-01-20"))
+encounter_df_1 <- read_excel(here('analyze', 'input', file), sheet=1, skip=6) %>%
+  janitor::clean_names() %>%
+  mutate(event_date = as.Date(event_date))
+
+encounter_df_2 <- read_excel(here('analyze', 'input', file), sheet=2, skip=6) %>%
+  janitor::clean_names() %>%
+  mutate(event_date = as.Date(event_date))
+
+encounter_df <- rbind(encounter_df_1, encounter_df_2)
+
+rm(encounter_df_1, encounter_df_2)
+
+encounter_df <- encounter_df %>% 
+  mutate(pre_trump = event_date < as.Date("2025-01-20"))
 
 encounter_df_uq <- encounter_df %>%
   arrange(desc(event_date)) %>%
@@ -64,9 +74,9 @@ encounter_ids <- unique(encounter_df$unique_identifier)
 
 ```{r setup_arrests, message=FALSE, warning=FALSE, include=TRUE}
 
-file <- "ERO_Admin_Arrests_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests_LESA-STU_FINAL_unprotected.xlsx"
 
-arrest_df<- read_excel(here('analyze', 'input', file), skip=6) %>% 
+arrest_df<- read_excel(here('analyze', 'input', file), skip=5) %>% 
   janitor::clean_names() %>% 
   mutate(apprehension_date = as.Date(apprehension_date),
          apprehension_method = fct(apprehension_method),
@@ -85,7 +95,7 @@ arrest_ids <- unique(arrest_df$unique_identifier)
 
 ```{r setup_detentions, message=FALSE, warning=FALSE, include=TRUE}
 
-file <- "ice_detentions_nov23-feb25.csv.gz"
+file <- "ice_detentions_nov23-jun25.csv.gz"
 
 detain_unique_stays_df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
   janitor::clean_names() %>% 
@@ -95,6 +105,17 @@ detain_unique_stays_df <- read_delim(here('analyze', 'input', file), delim='|') 
          stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
          pre_trump = stay_book_in_date_time < as.Date("2025-01-20")) %>% 
   left_join(facilities_df, by=c("detention_facility_code" = "detloc"))
+
+```
+
+```{r setup_removals, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "2025-ICLI-00019_2024-ICFO-39357_ICE_Removals_LESA-STU_FINAL_2025only_unprotected.xlsx"
+
+removals_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
+  janitor::clean_names() %>% filter(!is.na(unique_identifier))
+
+removal_ids <- unique(removals_df$unique_identifier)
 
 ```
 
@@ -296,6 +317,40 @@ generate_sankey(dat, "Detention flows thru NWIPC",
 ```{r detention_flow_post_trump, fig.width = 10}
 
 nwdc_detentions <- df[df$detention_facility_code == "CSCNWWA", "unique_identifier"]
+stages <- c("encounter", "arrest", "facil_1", "facil_2", "facil_3", "facil_4", "facil_5")
+
+dat <- df %>% 
+  filter(unique_identifier %in% unlist(nwdc_detentions),
+         stay_book_in_date_time >= "2025-01-20")
+
+generate_sankey(dat, "Detention flows thru NWIPC",
+                "First three weeks Trump admin., > 5 ppl",
+                stages,
+                outcome = TRUE)
+
+```
+
+```{r detention_flow_seahold_pre_trump, fig.width=15}
+
+seahold_detentions <- df[df$detention_facility_code == "SEAHOLD", "unique_identifier"]
+stages <- c("encounter", "arrest", "facil_1", "facil_2", "facil_3", "facil_4", "facil_5", "facil_6", "facil_7")
+
+dat <- df %>% 
+  filter(unique_identifier %in% unlist(nwdc_detentions),
+         stay_book_in_date_time > "2024-11-01",
+         stay_book_in_date_time < "2025-01-20")
+
+generate_sankey(dat, "Detention flows thru NWIPC",
+                "Last three months Biden admin., > 5 ppl",
+                stages,
+                outcome=TRUE,
+                vspace = 10)  # When outcome = TRUE, vspace should be set manually for best visual results
+
+```
+
+```{r detention_flow_seahold_post_trump, fig.width = 10}
+
+nwdc_detentions <- df[df$detention_facility_code == "SEAHOLD", "unique_identifier"]
 stages <- c("encounter", "arrest", "facil_1", "facil_2", "facil_3", "facil_4", "facil_5")
 
 dat <- df %>% 
