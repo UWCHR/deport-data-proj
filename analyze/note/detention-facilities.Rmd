@@ -20,7 +20,7 @@ library(pacman)
 
 p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, digest, ggsankeyfier, ggVennDiagram)
 
-file <- "ice_detentions_nov23-feb25.csv.gz"
+file <- "ice_detentions_nov23-jun25.csv.gz"
 
 df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
   janitor::clean_names() %>% 
@@ -56,8 +56,12 @@ sum(is.na(df$unique_identifier))
 
 known_facil <- read_delim(here::here('analyze', 'input', 'facilities.csv.gz'), delim ='|')
 
+feb_coded <- read_delim(here::here('analyze', 'hand', 'coded_facilities_feb2025.csv'), delim = ',')
+
+more_known_facilities <- union(known_facil$detloc, feb_coded$detention_facility_code)
+
 df <- df %>% 
-  mutate(known_facil = detention_facility_code %in% unique(known_facil$detloc))
+  mutate(known_facil = detention_facility_code %in% more_known_facilities)
 
 # Most detention records involve known facilities (NIJC 2017 + UWCHR)
 sum(df$known_facil) / nrow(df)
@@ -66,19 +70,39 @@ sum(df$known_facil) / nrow(df)
 unknown_facil <- unique(df[df$known_facil == FALSE, c("detention_facility_code", "detention_facility")]) %>% 
   arrange(detention_facility)
 
-write_delim(unknown_facil, here::here('analyze', 'output', 'unknown_facilities_2025.csv'), delim=',')
+write_delim(unknown_facil, here::here('analyze', 'output', 'unknown_facilities_jun2025.csv'), delim=',')
 
-to_join <- known_facil %>% 
-  dplyr::select(detloc, aor, state, circuit, over_72, type) %>% 
+```
+
+```{r join_facil_characteristics}
+
+feb_coded$circuit <- NA_character_
+feb_coded$over_72 <- NA_character_
+feb_coded$aor <- NA_character_
+
+dat1 <- known_facil %>% 
+  dplyr::select(detloc, name, aor, state, circuit, over_72, type) %>% 
   rename(detention_facility_code = detloc,
+         detention_facility = name,
          detention_facility_aor = aor,
          detention_facility_state = state,
          detention_facility_circuit = circuit,
          detention_facility_over_72 = over_72,
          detention_facility_type = type)
 
-df <- df %>% 
-  left_join(to_join, by="detention_facility_code")
+dat2 <- feb_coded %>% 
+  dplyr::select(detention_facility_code, detention_facility, aor, state, circuit, over_72, type) %>% 
+  rename(detention_facility_aor = aor,
+         detention_facility_state = state,
+         detention_facility_circuit = circuit,
+         detention_facility_over_72 = over_72,
+         detention_facility_type = type)
+
+to_join <- rbind(dat1, dat2)
+
+```
+
+```{r}
 
 detloc_aor <- known_facil %>% 
   rename(detention_facility_code = detloc,
