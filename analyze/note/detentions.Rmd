@@ -20,7 +20,7 @@ library(pacman)
 
 p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, digest, ggsankeyfier)
 
-file <- "ice_detentions_nov23-feb25.csv.gz"
+file <- "ice_detentions_nov23-jun25.csv.gz"
 
 df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
   janitor::clean_names() %>% 
@@ -404,19 +404,22 @@ p2
 
 ```{r get_wa_arrests}
 
-file <- "ERO_Admin_Arrests_2025-ICLI-00019_2024-ICFO-39357_LESA-STU_FINAL_raw.xlsx"
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests_LESA-STU_FINAL_unprotected.xlsx"
 
-arr <- read_excel(here('analyze', 'input', file), skip=6) %>%
-  janitor::clean_names() %>%
+arr <- read_excel(here('analyze', 'input', file), skip=5) %>% 
+  janitor::clean_names()
+
+arr <- arr %>% 
   mutate(apprehension_date = as.Date(apprehension_date)) |>
   mutate(apprehension_method = fct(apprehension_method)) |>
   mutate(criminality = apprehension_criminality == "1 Convicted Criminal") |>
-  mutate(n_dupe = row_number(), .by = c("apprehension_date", "apprehension_method", "apprehension_criminality", "unique_identifier")) |>
-  filter(is.na(unique_identifier) | n_dupe == 1) |>
-  mutate(week = floor_date(apprehension_date, "week", week_start = "Monday"))
+  mutate(n_dupe = row_number(), .by = c("unique_identifier")) |>
+  filter(!is.na(unique_identifier))
+
+arrest_ids <- unique(arr$unique_identifier)
 
 to_join <- arr %>%
-  dplyr::select(unique_identifier, citizenship_country, final_program_group)
+  dplyr::select(unique_identifier, apprehension_aor, apprehension_state)
 
 to_join <- to_join[!duplicated(to_join$unique_identifier), ]
 
@@ -431,6 +434,48 @@ rm(to_join)
 
 wa_arr <- arr %>%
   filter(apprehension_state == "WASHINGTON")
+
+wa_facil <- c("FDLHOLD",
+"HAVMCWA",
+"RICHOLD",
+"SPOHOLD",
+"STJMCWA",
+"TACGHWA",
+"WNTHOLD",
+"ABRDNWA",
+"ADAMSWA",
+"BLHHOLD",
+"BENTOWA",
+"CHELAWA",
+"CLJUVWA",
+"CLARKWA",
+"COWLIWA",
+"COWJVWA",
+"ECOLOWA",
+"FERRYWA",
+"FORKSWA",
+"FRANKWA",
+"GRANTWA",
+"KINCOWA",
+"KITTIWA",
+"MARTIWA",
+"MASONWA",
+"WAMCNEI",
+"CSCNWWA",
+"OKANOWA",
+"PENDOWA",
+"RRFINWA",
+"REGJCWA",
+"BOPSET",
+"SEAICDF",
+"SEAHOLD",
+"SPOKAWA",
+"STEVEWA",
+"SUNNYWA",
+"THURSWA",
+"WHICOWA",
+"YIKIMWA",
+"YAKHOLD")
 
 ```
 
@@ -549,37 +594,51 @@ plotly::ggplotly(p1)
 
 ```{r facil_headcount_citizenship}
 
-# # Generate limited sample dataset
-# temp_df <- df %>% 
-#   filter(detention_facility_code == "CSCNWWA")
-# 
-# # Apply function to timeline
-# example_headcount <- lapply(timeline, headcounter, df=temp_df, group_vars=c('citizenship_country'))
-# 
-# top <- temp_df %>% 
-#   filter(!is.na(citizenship_country)) %>% 
-#   count(citizenship_country) %>% 
-#   arrange(desc(n)) %>% 
-#   head(10)
-# 
-# # Transform output into data frame
-# example_headcount_data <- map_dfr(example_headcount, bind_rows)
-# 
-# # Plot headcount
-# p1 <- example_headcount_data %>% 
-#   mutate(citizenship_country = case_when(citizenship_country %in% top$citizenship_country ~ citizenship_country,
-#                                          is.na(citizenship_country) ~ NA,
-#                                          TRUE ~ "ALL OTHERS"),
-#          date = as.Date(date)) %>%
-#   group_by(citizenship_country, date) %>% 
-#   summarize(n = sum(n)) %>% 
-#   filter(date >= "2023-11-15") %>% 
-#   ggplot(aes(x = date, y = n, color = citizenship_country), group = citizenship_country ) +
-#   geom_line() +
-#   labs(title = "Daily detained population by `citizenship_country`",
-#        subtitle = "Northwest ICE Processing Center")
-# 
-# p1
+# Generate limited sample dataset
+temp_df <- df %>%
+  filter(detention_facility_code == "CSCNWWA")
+
+# Apply function to timeline
+example_headcount <- lapply(timeline, headcounter, df=temp_df, group_vars=c('citizenship_country'))
+
+top <- temp_df %>%
+  filter(!is.na(citizenship_country)) %>%
+  count(citizenship_country) %>%
+  arrange(desc(n)) %>%
+  head(10)
+
+# Transform output into data frame
+example_headcount_data <- map_dfr(example_headcount, bind_rows)
+
+# Plot headcount
+p1 <- example_headcount_data %>%
+  mutate(citizenship_country = case_when(citizenship_country %in% top$citizenship_country ~ citizenship_country,
+                                         is.na(citizenship_country) ~ NA,
+                                         TRUE ~ "ALL OTHERS"),
+         date = as.Date(date)) %>%
+  group_by(citizenship_country, date) %>%
+  summarize(n = sum(n)) %>%
+  filter(date >= "2023-11-15") %>%
+  ggplot(aes(x = date, y = n, color = citizenship_country), group = citizenship_country ) +
+  geom_line() +
+  labs(title = "Daily detained population by `citizenship_country`",
+       subtitle = "Northwest ICE Processing Center")
+
+p1
+
+# Plot headcount
+p2 <- example_headcount_data %>%
+  mutate(date = as.Date(date)) %>%
+  group_by(citizenship_country, date) %>%
+  summarize(n = sum(n)) %>%
+  filter(date >= "2023-11-15") %>%
+  ggplot(aes(x = date, y = n, color = citizenship_country), group = citizenship_country ) +
+  geom_line() +
+  labs(title = "Daily detained population by `citizenship_country`",
+       subtitle = "Northwest ICE Processing Center")
+
+plotly::ggplotly(p2)
+
 
 ```
 
@@ -652,5 +711,36 @@ p2 <- dat2 %>%
 p2
 
 # What does it mean for a detention stay to end as "Transferred"?
+
+```
+
+```{r wa_bookins}
+
+wa_bookins <- df %>% 
+  filter(detention_facility_code %in% wa_facil) %>% 
+  mutate(week = floor_date(stay_book_in_date_time, "week", week_start = "Monday"),
+         yearmon = as.yearmon(stay_book_in_date_time))
+
+t1 <- wa_bookins %>% 
+  filter(stay_book_in_date_time >= "2025-01-20") %>% 
+  count(detention_facility)
+
+p1 <- wa_bookins %>% 
+  filter(stay_book_in_date_time >= "2023-11-01") %>% 
+  count(yearmon, detention_facility) %>% 
+  ggplot(aes(x = yearmon, y = n, fill = detention_facility)) +
+  geom_col()
+
+p1
+
+p2 <- wa_bookins %>% 
+  filter(stay_book_in_date_time >= "2025-01-01") %>% 
+  count(week, detention_facility) %>% 
+  ggplot(aes(x = week, y = n, fill = detention_facility)) +
+  geom_col() +
+  labs(title = "Weekly WA detention facil. book-ins",
+       subtitle = "Since Jan. 2025")
+
+p2
 
 ```
