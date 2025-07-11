@@ -119,15 +119,20 @@ id_lookup <- function(unique_identifier, dataset, output = FALSE) {
     knitr::kable(records)
   } else if (output == "df" | output == FALSE) {
     records
+  } else if (output == "text") {
+      for (n in seq(nrow(records))) {
+        for (i in seq(length(records[n,]))) {
+          print(paste(names(records[n,i]), ": ", records[n,i]))
+        }
+      }
+    }
   }
-  
-}
 
 ```
 
 ```{r}
 
-id_lookup("2b523cdad2a0705f5f06c4a1860c606e439c8abe", arrest_df, output="kable")
+id_lookup("b970c968ba8babd9b92ff3fd739fe30232666d59", arrest_df, output="text")
 
 ```
 

@@ -106,7 +106,9 @@ detention_ids <- unique(detention_df$unique_identifier)
 file <- "2025-ICLI-00019_2024-ICFO-39357_ICE_Removals_LESA-STU_FINAL_2025only_unprotected.xlsx"
 
 removals_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
-  janitor::clean_names() %>% filter(!is.na(unique_identifier))
+  janitor::clean_names() %>%
+  filter(!is.na(unique_identifier)) %>% 
+  mutate(n_dupe = row_number(), .by = c("unique_identifier"))
 
 removal_ids <- unique(removals_df$unique_identifier)
 
@@ -162,13 +164,17 @@ p2
 
 ```
 
+Small number of records have inconsistent `citizenship_country` or `departure_country` values across arrest and removal datasets, even when restricting to records with no duplicate `unique_identifier`. While this represents a very miniscule proportion of records across full dataset, it is not insignificant in context of possible third-country deportations.
+
 ```{r}
 
 arrests_subset <- arrest_df %>% 
-  dplyr::select(unique_identifier, citizenship_country, departure_country)
+  filter(n_dupe == 1) %>% 
+  dplyr::select(unique_identifier, citizenship_country, departure_country, n_dupe)
 
 removals_subset <- removals_df %>% 
-  dplyr::select(unique_identifier, citizenship_country, departure_country)
+  filter(n_dupe == 1) %>% 
+  dplyr::select(unique_identifier, citizenship_country, departure_country, n_dupe)
 
 compare_subsets <- inner_join(arrests_subset, removals_subset, by="unique_identifier", suffix = c(".arrests", ".removals"), relationship = "many-to-many")
 
@@ -637,5 +643,25 @@ p2.1 <- removals_df %>%
   geom_line()
 
 p2.1
+
+```
+
+Apparent Panama third country deportations significantly under-counted compared to reports.
+
+```{r panama}
+
+panama_third_country_removals <- removals_df %>% 
+  filter(citizenship_country != "PANAMA",
+         departure_country == "PANAMA")
+
+panama_third_country_arrests <- arrest_df %>% 
+  filter(citizenship_country != "PANAMA",
+         departure_country == "PANAMA")
+
+panama_third_country_detention <- detention_df %>% 
+  filter(citizenship_country != "PANAMA",
+         departure_country == "PANAMA") %>% 
+  distinct(stayid, .keep_all=TRUE)
+  
 
 ```

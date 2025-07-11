@@ -1,0 +1,486 @@
+---
+title: "Comparison of anonymized identifiers across datasets"
+author: "UWCHR"
+date: "2025-03-31"
+output:
+    html_document:
+        html_preview: true
+        toc: true
+        toc_depth: 3
+        toc_float: true
+        code_folding: hide
+---
+
+
+```{r setup, message=FALSE, warning=FALSE, include=TRUE}
+
+options(scipen = 1000000)
+
+library(pacman)
+
+p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, ggVennDiagram, UpSetR)
+
+```
+
+
+```{r setup_encounters, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Encounters_FINAL_unprotected.xlsx"
+
+encounter_df_1 <- read_excel(here('analyze', 'input', file), sheet=1, skip=6) %>%
+  janitor::clean_names() %>%
+  mutate(event_date = as.Date(event_date))
+
+encounter_df_2 <- read_excel(here('analyze', 'input', file), sheet=2, skip=6) %>%
+  janitor::clean_names() %>%
+  mutate(event_date = as.Date(event_date))
+
+encounter_df <- rbind(encounter_df_1, encounter_df_2)
+
+rm(encounter_df_1, encounter_df_2)
+
+encounter_ids <- unique(encounter_df$unique_identifier)
+
+```
+
+
+```{r setup_detainers}
+
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Detainers_LESA-STU_FINAL_unprotected.xlsx"
+
+detainer_df<- read_excel(here('analyze', 'input', file), skip=6) %>% 
+  janitor::clean_names()
+
+detainer_df<- detainer_df%>% 
+  mutate(date_diff = difftime(detainer_prepare_date, apprehension_date, units = "days"))
+
+detainer_ids <- unique(detainer_df$unique_identifier)
+
+```
+
+```{r setup_arrests, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests_LESA-STU_FINAL_unprotected.xlsx"
+
+arrest_df<- read_excel(here('analyze', 'input', file), skip=5) %>% 
+  janitor::clean_names()
+
+arrest_df <- arrest_df %>% 
+  mutate(apprehension_date = as.Date(apprehension_date)) |>
+  mutate(apprehension_method = fct(apprehension_method)) |>
+  mutate(criminality = apprehension_criminality == "1 Convicted Criminal") |>
+  mutate(n_dupe = row_number(), .by = c("unique_identifier")) |>
+  filter(!is.na(unique_identifier))
+
+arrest_ids <- unique(arrest_df$unique_identifier)
+
+```
+
+```{r setup_detention, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "ice_detentions_nov23-jun25.csv.gz"
+
+detention_df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
+  mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
+         book_in_date_time = ymd_hms(book_in_date_time),
+         detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
+         stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
+         stay_book_out_date = ymd(stay_book_out_date),
+         book_in_fy = substr(quarter(book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4),
+         stay_book_in_fy = substr(quarter(stay_book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4)) %>% filter(!is.na(unique_identifier))
+
+
+detention_df <- detention_df %>% 
+  group_by(unique_identifier) %>% 
+  arrange(stay_book_in_date_time, book_in_date_time, unique_identifier) %>% 
+  ungroup()
+
+detention_ids <- unique(detention_df$unique_identifier)
+
+```
+
+```{r setup_removals, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "2025-ICLI-00019_2024-ICFO-39357_ICE_Removals_LESA-STU_FINAL_2025only_unprotected.xlsx"
+
+removals_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
+  janitor::clean_names() %>% filter(!is.na(unique_identifier))
+
+removal_ids <- unique(removals_df$unique_identifier)
+
+```
+
+```{r compare_sets}
+
+sets <- list("encounters" = encounter_ids,
+             "detainers" = detainer_ids,
+             "arrests" = arrest_ids,
+             "detentions" = detention_ids,
+             "removals" = removal_ids)
+
+# p1 <- ggVennDiagram(x = sets,
+#                     color = name,
+#                     label = "count") +
+#   scale_fill_gradient(low = "#F4FAFE", high = "#4981BF")
+# 
+# p1
+
+p2 <- ggVennDiagram(x = sets,
+              force_upset = TRUE, order.set.by = "name", order.intersect.by = "size"
+              )
+
+p2 
+
+```
+
+```{r plot_all_enforcement}
+
+dat1 <- encounter_df %>% 
+  filter(event_date >= "2023-11-01",
+    event_date <= "2025-05-30") %>% 
+  mutate(yearmon = as.yearmon(event_date)) %>% 
+  count(yearmon) %>% 
+  mutate(type = "encounter")
+
+dat2 <- detainer_df %>% 
+  filter(detainer_prepare_date >= "2023-11-01",
+         detainer_prepare_date <= "2025-05-30") %>% 
+  mutate(yearmon = as.yearmon(detainer_prepare_date)) %>% 
+  count(yearmon) %>% 
+  mutate(type = "detainer")
+
+dat3 <- arrest_df %>% 
+  filter(apprehension_date >= "2023-11-01",
+    apprehension_date <= "2025-05-30") %>% 
+  mutate(yearmon = as.yearmon(apprehension_date)) %>% 
+  count(yearmon) %>% 
+  mutate(type = "arrest")
+
+dat4 <- removals_df %>% 
+  filter(departed_date >= "2023-11-01",
+         departed_date <= "2025-05-30") %>% 
+  mutate(yearmon = as.yearmon(departed_date)) %>% 
+  count(yearmon) %>% 
+  mutate(type = "removal")
+
+dat <- rbind(dat1, dat2, dat3, dat4)
+
+p1 <- dat %>% 
+  ggplot(aes(x = yearmon, y = n, fill = type)) +
+  geom_col(aes(group = type), position="dodge") +
+  ylim(0, NA)
+
+p1
+
+```
+
+https://ohss.dhs.gov/khsm/ice-detentions
+
+```{r plot_detention_book_in_out}
+
+dat5 <- detention_df %>% 
+  filter(stay_book_in_date_time >= "2023-11-01",
+       book_in_date_time >= "2023-11-01",
+       book_in_date_time <= "2025-05-30",
+       placement_count == 1,
+       ) %>% 
+    mutate(yearmon = as.yearmon(book_in_date_time),
+           book_in_year = year(stay_book_in_date_time)) %>% 
+  count(yearmon) %>% 
+  mutate(type = "initial detention book-in")
+
+dat6 <- detention_df %>% 
+  filter(stay_book_out_date_time >= "2023-11-01",
+       detention_book_out_date_time  >= "2023-11-01",
+       detention_book_out_date_time <= "2025-05-30",
+       placement_count == total_placements,
+       ) %>% 
+    mutate(yearmon = as.yearmon(detention_book_out_date_time),
+           book_in_year = year(detention_book_out_date_time)) %>% 
+  count(yearmon) %>% 
+  mutate(type = "detention book-out")
+
+dat <- rbind(dat5, dat6)
+
+p1 <- dat %>% 
+  ggplot(aes(x = yearmon, y = n, fill = type)) +
+  geom_col(aes(group = type), position="dodge") +
+  ylim(0, NA)
+
+p1
+
+```
+
+Appearance of `unique_identifier` values within and across datasets. What can we do with this? No reason not to expect that any of these datasets could have repeat entries per individual.
+
+```{r compare_n_id}
+
+dat1 <- encounter_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  count(unique_identifier) %>% 
+  mutate(type = "encounter")
+
+dat2 <- detainer_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  count(unique_identifier) %>% 
+  mutate(type = "detainer")
+
+dat3 <- arrest_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  count(unique_identifier) %>% 
+  mutate(type = "arrest")
+
+dat4 <- detention_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  count(unique_identifier) %>% 
+  mutate(type = "detention")
+
+dat5 <- removals_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  count(unique_identifier) %>% 
+  mutate(type = "removal")
+
+dat <- rbind(dat1, dat2, dat3, dat4, dat5)
+
+dat_wide <- pivot_wider(dat, id_cols = c('unique_identifier'), names_from = "type", values_from = "n")
+
+```
+
+A small subset of meaningful fields are shared by all datasets. Other fields shared by two or more datasets, could analyze these as well.
+
+```{r shared_cols}
+
+encounter_cols <- names(encounter_df)
+detainer_cols <- names(detainer_df)
+arrest_cols <- names(arrest_df)
+detention_cols <- names(detention_df)
+removal_cols <- names(removals_df)
+
+shared_cols <- Reduce(intersect, list(encounter_cols, detainer_cols, arrest_cols, detention_cols, removal_cols))
+
+```
+
+This is a crude comparison of values per unique identifier across datasets. Highlights cases where specific values are perturbed across datasets. Would we expect these values to be constant across datasets, presuming generated at same time?
+
+Crude because `distinct()` naively selects first occurrence of `unique_identifier` per dataset, when repeat entries per `unique_identifier` could be associated with perturbation of values across datasets. Better to check for perturbation across `unique_identifier` within datasets first? Or restrict to `unique_identifier` values with or without repeat records (not realistic for detentions data).
+
+```{r compare_final_program}
+
+dat1 <- encounter_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, final_program) %>% 
+  mutate(type = "encounter")
+
+dat2 <- detainer_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, final_program) %>% 
+  mutate(type = "detainer")
+
+dat3 <- arrest_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, final_program) %>% 
+  mutate(type = "arrest")
+
+dat4 <- detention_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, final_program) %>% 
+  mutate(type = "detention")
+
+dat5 <- removals_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, final_program) %>% 
+  mutate(type = "removal")
+
+dat <- rbind(dat1, dat2, dat3, dat4, dat5)
+
+dat <- dat %>% 
+  group_by(unique_identifier) %>% 
+  mutate(n_dist = n_distinct(final_program, na.rm=TRUE))
+
+dat_wide <- pivot_wider(dat, id_cols = c('unique_identifier', 'n_dist'), names_from = "type", values_from = "final_program") %>% 
+  filter(n_dist > 1)
+
+
+
+```
+
+```{r compare_gender}
+
+dat1 <- encounter_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, gender) %>% 
+  mutate(type = "encounter")
+
+dat2 <- detainer_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, gender) %>% 
+  mutate(type = "detainer")
+
+dat3 <- arrest_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, gender) %>% 
+  mutate(type = "arrest")
+
+dat4 <- detention_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, gender) %>% 
+  mutate(type = "detention")
+
+dat5 <- removals_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, gender) %>% 
+  mutate(type = "removal")
+
+dat <- rbind(dat1, dat2, dat3, dat4, dat5)
+
+dat <- dat %>% 
+  group_by(unique_identifier) %>% 
+  mutate(n_dist = n_distinct(gender, na.rm=TRUE))
+
+dat_wide <- pivot_wider(dat, id_cols = c('unique_identifier', 'n_dist'), names_from = "type", values_from = "gender") %>% 
+  filter(n_dist > 1)
+
+
+
+```
+
+```{r compare_citizenship}
+
+dat1 <- encounter_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, citizenship_country) %>% 
+  mutate(type = "encounter")
+
+dat2 <- detainer_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, citizenship_country) %>% 
+  mutate(type = "detainer")
+
+dat3 <- arrest_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, citizenship_country) %>% 
+  mutate(type = "arrest")
+
+dat4 <- detention_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, citizenship_country) %>% 
+  mutate(type = "detention")
+
+dat5 <- removals_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, citizenship_country) %>% 
+  mutate(type = "removal")
+
+dat <- rbind(dat1, dat2, dat3, dat4, dat5)
+
+dat <- dat %>% 
+  group_by(unique_identifier) %>% 
+  mutate(n_dist = n_distinct(citizenship_country, na.rm=TRUE))
+
+dat_wide <- pivot_wider(dat, id_cols = c('unique_identifier', 'n_dist'), names_from = "type", values_from = "citizenship_country") %>% 
+  filter(n_dist > 1)
+
+
+
+```
+
+```{r compare_departed}
+
+dat1 <- encounter_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, citizenship_country) %>% 
+  mutate(type = "encounter")
+
+dat2 <- detainer_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, citizenship_country) %>% 
+  mutate(type = "detainer")
+
+dat3 <- arrest_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, citizenship_country) %>% 
+  mutate(type = "arrest")
+
+dat4 <- detention_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, citizenship_country) %>% 
+  mutate(type = "detention")
+
+dat5 <- removals_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, citizenship_country) %>% 
+  mutate(type = "removal")
+
+dat <- rbind(dat1, dat2, dat3, dat4, dat5)
+
+dat <- dat %>% 
+  group_by(unique_identifier) %>% 
+  mutate(n_dist = n_distinct(citizenship_country, na.rm=TRUE))
+
+dat_wide <- pivot_wider(dat, id_cols = c('unique_identifier', 'n_dist'), names_from = "type", values_from = "citizenship_country") %>% 
+  filter(n_dist > 1)
+
+```
+
+```{r compare_final_order_date}
+
+dat1 <- encounter_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, final_order_date) %>% 
+  mutate(type = "encounter")
+
+dat2 <- detainer_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, final_order_date) %>% 
+  mutate(type = "detainer")
+
+dat3 <- arrest_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, final_order_date) %>% 
+  mutate(type = "arrest")
+
+dat4 <- detention_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, final_order_date) %>% 
+  mutate(type = "detention")
+
+dat5 <- removals_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, final_order_date) %>% 
+  mutate(type = "removal")
+
+dat <- rbind(dat1, dat2, dat3, dat4, dat5)
+
+dat <- dat %>% 
+  group_by(unique_identifier) %>% 
+  mutate(n_dist = n_distinct(final_order_date, na.rm=TRUE))
+
+dat_wide <- pivot_wider(dat, id_cols = c('unique_identifier', 'n_dist'), names_from = "type", values_from = "final_order_date") %>% 
+  filter(n_dist > 1)
+
+```
