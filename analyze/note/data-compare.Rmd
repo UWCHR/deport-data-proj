@@ -484,3 +484,56 @@ dat_wide <- pivot_wider(dat, id_cols = c('unique_identifier', 'n_dist'), names_f
   filter(n_dist > 1)
 
 ```
+
+```{r compare_case_category}
+
+dat1 <- encounter_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, case_category) %>% 
+  mutate(type = "encounter")
+
+dat2 <- detainer_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, case_category) %>% 
+  mutate(type = "detainer")
+
+dat3 <- arrest_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, case_category) %>% 
+  mutate(type = "arrest")
+
+dat4 <- detention_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, case_category) %>% 
+  mutate(type = "detention")
+
+dat5 <- removals_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, case_category) %>% 
+  mutate(type = "removal")
+
+dat <- rbind(dat1, dat2, dat3, dat4, dat5)
+
+dat <- dat %>% 
+  group_by(unique_identifier) %>% 
+  mutate(n_dist = n_distinct(case_category, na.rm=TRUE)) %>% 
+  ungroup()
+
+p1 <- dat %>%
+  count(type, case_category) %>% 
+  mutate(type = factor(type, levels = c("encounter", "detainer", "arrest", "detention", "removal"))) %>% 
+  ggplot(aes(x = type, y = n, fill = case_category)) +
+  geom_col(position = "fill")
+
+plotly::ggplotly(p1)
+
+dat_wide <- pivot_wider(dat, id_cols = c('unique_identifier', 'n_dist'), names_from = "type", values_from = "case_category") %>% 
+  filter(n_dist > 1)
+
+
+```
