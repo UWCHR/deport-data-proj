@@ -22,6 +22,12 @@ p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, r
 
 ```
 
+- Removals from Seattle AOR
+- Removals of ppl arrested in WA
+- Removals by whether detained at NWDC
+- Ppl transferred from NWDC to SEAHOLD: patterns
+- Ppl arrested in WA and removed w/o being held at NWDC
+- Ppl removed via methods excluding ICE Air hubs
 
 ```{r setup_encounters, message=FALSE, warning=FALSE, include=TRUE}
 
