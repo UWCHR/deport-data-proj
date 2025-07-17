@@ -21,37 +21,40 @@ p_load(here, tidyverse, zoo, lubridate, ggplot2, ggforce, plotly, gghighlight, v
 
 ```
 
-```{r setup_detainers, message=FALSE, warning=FALSE, include=TRUE}
-
-file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Detainers_LESA-STU_FINAL_unprotected.xlsx"
-
-detainer_df<- read_excel(here('analyze', 'input', file), skip=6) %>%
-  janitor::clean_names()
-
-detainer_df<- detainer_df%>%
-  mutate(date_diff = difftime(detainer_prepare_date, apprehension_date, units = "days"))
-
-detainer_ids <- unique(detainer_df$unique_identifier)
-
-```
-
 ```{r setup_encounters, message=FALSE, warning=FALSE, include=TRUE}
 
 file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Encounters_FINAL_unprotected.xlsx"
 
 encounter_df_1 <- read_excel(here('analyze', 'input', file), sheet=1, skip=6) %>%
   janitor::clean_names() %>%
-  mutate(event_date = as.Date(event_date))
+  mutate(event_date = as.Date(event_date)) %>% 
+  filter(!is.na(unique_identifier))
 
 encounter_df_2 <- read_excel(here('analyze', 'input', file), sheet=2, skip=6) %>%
   janitor::clean_names() %>%
-  mutate(event_date = as.Date(event_date))
+  mutate(event_date = as.Date(event_date)) %>% 
+  filter(!is.na(unique_identifier))
 
 encounter_df <- rbind(encounter_df_1, encounter_df_2)
 
 rm(encounter_df_1, encounter_df_2)
 
 encounter_ids <- unique(encounter_df$unique_identifier)
+
+```
+
+```{r setup_detainers, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Detainers_LESA-STU_FINAL_unprotected.xlsx"
+
+detainer_df<- read_excel(here('analyze', 'input', file), skip=6) %>%
+  janitor::clean_names()  %>% 
+  filter(!is.na(unique_identifier))
+
+detainer_df<- detainer_df%>%
+  mutate(date_diff = difftime(detainer_prepare_date, apprehension_date, units = "days"))
+
+detainer_ids <- unique(detainer_df$unique_identifier)
 
 ```
 
@@ -101,7 +104,8 @@ detention_ids <- unique(detention_df$unique_identifier)
 file <- "2025-ICLI-00019_2024-ICFO-39357_ICE_Removals_LESA-STU_FINAL_2025only_unprotected.xlsx"
 
 removals_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
-  janitor::clean_names() %>% filter(!is.na(unique_identifier))
+  janitor::clean_names() %>%
+  filter(!is.na(unique_identifier))
 
 removal_ids <- unique(removals_df$unique_identifier)
 
@@ -138,7 +142,7 @@ id_lookup("b970c968ba8babd9b92ff3fd739fe30232666d59", arrest_df, output="text")
 
 ```{r}
 
-id_lookup("2b523cdad2a0705f5f06c4a1860c606e439c8abe", encounter_df, output=FALSE)
+id_lookup("b970c968ba8babd9b92ff3fd739fe30232666d59", encounter_df, output=FALSE)
 
 ```
 
@@ -160,3 +164,64 @@ temp <- lookup_all("2b523cdad2a0705f5f06c4a1860c606e439c8abe", datasets)
 
 ```
 
+```{r long_record}
+
+id <- "b970c968ba8babd9b92ff3fd739fe30232666d59"
+
+encounter_recs <- encounter_df %>% 
+  mutate(date = as_datetime(event_date),
+         aor = responsible_aor,
+         loc = responsible_site) %>% 
+  filter(unique_identifier == id) %>% 
+  dplyr::select(unique_identifier, date, aor, loc) %>% 
+  mutate(type = "encounter")
+
+detainer_recs <- detainer_df %>% 
+  mutate(date = as_datetime(detainer_prepare_date),
+         aor = facility_aor,
+         loc = detention_facility) %>% 
+  filter(unique_identifier == id) %>% 
+  dplyr::select(unique_identifier, date, aor, loc) %>% 
+  mutate(type = "detainer")
+
+arrest_recs <- arrest_df %>% 
+  mutate(date = as_datetime(apprehension_date),
+         aor = apprehension_aor,
+         loc = apprehension_state) %>% 
+  filter(unique_identifier == id) %>% 
+  dplyr::select(unique_identifier, date, aor, loc) %>% 
+  mutate(type = "arrest")
+
+detention_book_in_recs <- detention_df %>% 
+  mutate(date = as_datetime(book_in_date_time),
+         aor = "",
+         loc = detention_facility) %>% 
+  filter(unique_identifier == id) %>% 
+  dplyr::select(unique_identifier, date, aor, loc) %>% 
+  mutate(type = "detention book-in")
+
+detention_book_out_recs <- detention_df %>% 
+  mutate(date = as_datetime(detention_book_out_date_time),
+         aor = "",
+         loc = detention_facility) %>% 
+  filter(unique_identifier == id) %>% 
+  dplyr::select(unique_identifier, date, aor, loc) %>% 
+  mutate(type = "detention book-out")
+
+removal_recs <- removals_df %>% 
+  mutate(date = as_datetime(departed_date),
+         aor = docket_aor,
+         loc = port_of_departure) %>% 
+  filter(unique_identifier == id) %>% 
+  dplyr::select(unique_identifier, date, aor, loc) %>% 
+  mutate(type = "removal")
+
+enforce_history <- rbind(encounter_recs,
+                         detainer_recs,
+                         arrest_recs,
+                         detention_book_in_recs,
+                         detention_book_out_recs,
+                         removal_recs) %>% 
+  arrange(date)
+
+```

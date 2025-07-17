@@ -112,6 +112,8 @@ removal_ids <- unique(removals_df$unique_identifier)
 
 ```{r compare_sets}
 
+data_levels <- c("encounter", "detainer", "arrest", "detention", "removal")
+
 sets <- list("encounters" = encounter_ids,
              "detainers" = detainer_ids,
              "arrests" = arrest_ids,
@@ -264,51 +266,6 @@ This is a crude comparison of values per unique identifier across datasets. High
 
 Crude because `distinct()` naively selects first occurrence of `unique_identifier` per dataset, when repeat entries per `unique_identifier` could be associated with perturbation of values across datasets. Better to check for perturbation across `unique_identifier` within datasets first? Or restrict to `unique_identifier` values with or without repeat records (not realistic for detentions data).
 
-```{r compare_final_program}
-
-dat1 <- encounter_df %>% 
-  filter(!is.na(unique_identifier)) %>% 
-  distinct(unique_identifier, .keep_all = TRUE) %>% 
-  dplyr::select(unique_identifier, final_program) %>% 
-  mutate(type = "encounter")
-
-dat2 <- detainer_df %>% 
-  filter(!is.na(unique_identifier)) %>% 
-  distinct(unique_identifier, .keep_all = TRUE) %>% 
-  dplyr::select(unique_identifier, final_program) %>% 
-  mutate(type = "detainer")
-
-dat3 <- arrest_df %>% 
-  filter(!is.na(unique_identifier)) %>% 
-  distinct(unique_identifier, .keep_all = TRUE) %>% 
-  dplyr::select(unique_identifier, final_program) %>% 
-  mutate(type = "arrest")
-
-dat4 <- detention_df %>% 
-  filter(!is.na(unique_identifier)) %>% 
-  distinct(unique_identifier, .keep_all = TRUE) %>% 
-  dplyr::select(unique_identifier, final_program) %>% 
-  mutate(type = "detention")
-
-dat5 <- removals_df %>% 
-  filter(!is.na(unique_identifier)) %>% 
-  distinct(unique_identifier, .keep_all = TRUE) %>% 
-  dplyr::select(unique_identifier, final_program) %>% 
-  mutate(type = "removal")
-
-dat <- rbind(dat1, dat2, dat3, dat4, dat5)
-
-dat <- dat %>% 
-  group_by(unique_identifier) %>% 
-  mutate(n_dist = n_distinct(final_program, na.rm=TRUE))
-
-dat_wide <- pivot_wider(dat, id_cols = c('unique_identifier', 'n_dist'), names_from = "type", values_from = "final_program") %>% 
-  filter(n_dist > 1)
-
-
-
-```
-
 ```{r compare_gender}
 
 dat1 <- encounter_df %>% 
@@ -345,12 +302,19 @@ dat <- rbind(dat1, dat2, dat3, dat4, dat5)
 
 dat <- dat %>% 
   group_by(unique_identifier) %>% 
-  mutate(n_dist = n_distinct(gender, na.rm=TRUE))
+  mutate(n_dist = n_distinct(gender, na.rm=TRUE)) %>% 
+  ungroup()
 
 dat_wide <- pivot_wider(dat, id_cols = c('unique_identifier', 'n_dist'), names_from = "type", values_from = "gender") %>% 
   filter(n_dist > 1)
 
+p1 <- dat %>% 
+  count(gender, type) %>% 
+  mutate(type = factor(type, levels=data_levels)) %>% 
+  ggplot(aes(x = type, y = n, fill = gender)) +
+  geom_col()
 
+p1
 
 ```
 
@@ -485,6 +449,66 @@ dat_wide <- pivot_wider(dat, id_cols = c('unique_identifier', 'n_dist'), names_f
 
 ```
 
+```{r compare_final_program}
+
+dat1 <- encounter_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, final_program) %>% 
+  mutate(type = "encounter")
+
+dat2 <- detainer_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, final_program) %>% 
+  mutate(type = "detainer")
+
+dat3 <- arrest_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, final_program) %>% 
+  mutate(type = "arrest")
+
+dat4 <- detention_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, final_program) %>% 
+  mutate(type = "detention")
+
+dat5 <- removals_df %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  dplyr::select(unique_identifier, final_program) %>% 
+  mutate(type = "removal")
+
+dat <- rbind(dat1, dat2, dat3, dat4, dat5)
+
+dat <- dat %>% 
+  group_by(unique_identifier) %>% 
+  mutate(n_dist = n_distinct(final_program, na.rm=TRUE)) %>% 
+  ungroup()
+
+dat_wide <- pivot_wider(dat, id_cols = c('unique_identifier', 'n_dist'), names_from = "type", values_from = "final_program") %>% 
+  filter(n_dist > 1)
+
+p1 <- dat %>% 
+  count(final_program, type) %>% 
+  mutate(type = factor(type, levels=data_levels)) %>% 
+  ggplot(aes(x = type, y = n, fill = final_program)) +
+  geom_col()
+
+plotly::ggplotly(p1)
+
+p1.1 <- dat %>% 
+  count(final_program, type) %>% 
+  mutate(type = factor(type, levels=data_levels)) %>% 
+  ggplot(aes(x = type, y = n, fill = final_program)) +
+  geom_col(position = "fill")
+
+plotly::ggplotly(p1.1)
+
+```
+
 ```{r compare_case_category}
 
 dat1 <- encounter_df %>% 
@@ -526,7 +550,7 @@ dat <- dat %>%
 
 p1 <- dat %>%
   count(type, case_category) %>% 
-  mutate(type = factor(type, levels = c("encounter", "detainer", "arrest", "detention", "removal"))) %>% 
+  mutate(type = factor(type, levels = data_levels) %>% 
   ggplot(aes(x = type, y = n, fill = case_category)) +
   geom_col(position = "fill")
 
