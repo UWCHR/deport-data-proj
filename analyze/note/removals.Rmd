@@ -66,19 +66,25 @@ p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, r
 
 ```{r setup_arrests, message=FALSE, warning=FALSE, include=TRUE}
 
-# file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests_LESA-STU_FINAL_unprotected.xlsx"
-# 
-# arrest_df<- read_excel(here('analyze', 'input', file), skip=5) %>% 
-#   janitor::clean_names()
-# 
-# arrest_df <- arrest_df %>% 
-#   mutate(apprehension_date = as.Date(apprehension_date)) |>
-#   mutate(apprehension_method = fct(apprehension_method)) |>
-#   mutate(criminality = apprehension_criminality == "1 Convicted Criminal") |>
-#   mutate(n_dupe = row_number(), .by = c("unique_identifier")) |>
-#   filter(!is.na(unique_identifier))
-# 
-# arrest_ids <- unique(arrest_df$unique_identifier)
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests_LESA-STU_FINAL_unprotected.xlsx"
+
+arrest_df<- read_excel(here('analyze', 'input', file), skip=5) %>%
+  janitor::clean_names()
+
+arrest_df <- arrest_df %>%
+  mutate(apprehension_date = as.Date(apprehension_date)) |>
+  mutate(apprehension_method = fct(apprehension_method)) |>
+  mutate(criminality = apprehension_criminality == "1 Convicted Criminal") |>
+  mutate(n_dupe = row_number(), .by = c("unique_identifier")) |>
+  filter(!is.na(unique_identifier))
+
+arrest_ids <- unique(arrest_df$unique_identifier)
+
+sea_aor_arrests <- arrest_df %>% 
+  filter(apprehension_aor == "Seattle Area of Responsibility")
+
+wa_arrests <- arrest_df %>% 
+  filter(apprehension_state == "WASHINGTON")
 
 ```
 
@@ -114,21 +120,149 @@ removals_df <- read_excel(here('analyze', 'input', file), skip=6) %>%
 
 removal_ids <- unique(removals_df$unique_identifier)
 
+removals_df <- removals_df %>% 
+  mutate(wa_arrest = unique_identifier %in% wa_arrests$unique_identifier,
+         sea_aor_arrest = unique_identifier %in% sea_aor_arrests$unique_identifier)
+
+```
+
+Strong weekly periodicity
+
+```{r}
+
+dat <- removals_df %>% 
+  count(departed_date)
+
+p1 <- dat %>% 
+  ggplot(aes(x = departed_date, y = n)) +
+  geom_col()
+  
+p1
+
+```
+
+```{r}
+
+dat <- removals_df %>% 
+  mutate(week = floor_date(departed_date, "week", week_start = "Monday")) %>% 
+  count(week)
+
+p1 <- dat %>% 
+  ggplot(aes(x = week, y = n)) +
+  geom_col()
+  
+p1
+
+```
+
+Note HQ AOR important for removals
+
+```{r}
+
+dat <- removals_df %>% 
+  mutate(week = floor_date(departed_date, "week", week_start = "Monday"),
+         docket_aor = str_replace(docket_aor, " Area of Responsibility", "")) %>% 
+  count(week, docket_aor)
+
+p1 <- dat %>% 
+  ggplot(aes(x = week, y = n)) +
+  geom_col() +
+  facet_wrap(~docket_aor)
+  
+p1
+
+```
+
+Most removals Tues-Fri
+
+```{r}
+
+dat <- removals_df %>% 
+  mutate(week = floor_date(departed_date, "week", week_start = "Monday"),
+         weekday = wday(departed_date, week_start = "Monday", label=TRUE, abbr=TRUE),
+         weeknum = week(departed_date),
+         docket_aor = str_replace(docket_aor, " Area of Responsibility", "")) %>% 
+  count(weekday)
+
+p1 <- dat %>% 
+  ggplot(aes(x = weekday, y = n)) +
+  geom_col()
+  
+p1
+
+```
+
+Removals by weekday and week in 2025. Not very interesting
+
+```{r}
+
+dat <- removals_df %>% 
+  mutate(week = floor_date(departed_date, "week", week_start = "Monday"),
+         weekday = wday(departed_date, week_start = "Monday", label=TRUE, abbr=TRUE),
+         weeknum = week(departed_date),
+         docket_aor = str_replace(docket_aor, " Area of Responsibility", "")) %>% 
+  count(weekday, weeknum)
+
+p1 <- dat %>% 
+  ggplot(aes(x = weekday, y = n, color = weeknum)) +
+  geom_line(aes(group=weeknum))
+  
+p1
+
+```
+
+```{r docket_aor}
+
+tab <- removals_df %>% 
+  count(docket_aor) %>% 
+  arrange(desc(n))
+
+```
+
+```{r sea_removals}
+
+p0 <- removals_df %>% 
+  filter(docket_aor == "Seattle Area of Responsibility") %>% 
+  mutate(week = floor_date(departed_date, "week", week_start = "Monday")) %>% 
+  count(week,) %>% 
+  ggplot(aes(x = week, y = n)) +
+  geom_col()
+
+p0
+
+p1 <- removals_df %>% 
+  filter(docket_aor == "Seattle Area of Responsibility") %>% 
+  mutate(week = floor_date(departed_date, "week", week_start = "Monday")) %>% 
+  count(week, sea_aor_arrest) %>% 
+  ggplot(aes(x = week, y = n, fill = sea_aor_arrest)) +
+  geom_col()
+
+p1
+
+p2 <- removals_df %>% 
+  filter(docket_aor == "Seattle Area of Responsibility") %>% 
+  mutate(week = floor_date(departed_date, "week", week_start = "Monday")) %>% 
+  count(week, wa_arrest) %>% 
+  ggplot(aes(x = week, y = n, fill = wa_arrest)) +
+  geom_col()
+
+p2
+
 ```
 
 ```{r docket_aor_port_of_depart}
 
-tab <- removals_df %>% 
+tab_sea_pod <- removals_df %>% 
   filter(docket_aor == "Seattle Area of Responsibility") %>% 
   count(port_of_departure)
 
-tab_2025 <- removals_df %>% 
+tab_sea_pod_2025 <- removals_df %>% 
   filter(docket_aor == "Seattle Area of Responsibility",
          departed_date >= "2025-01-20") %>% 
   count(port_of_departure) %>% 
   arrange(desc(n))
 
-tab_2025 <- removals_df %>% 
+tab_sea_pod_2025 <- removals_df %>% 
   filter(docket_aor == "Seattle Area of Responsibility",
          departed_date >= "2025-01-20") %>% 
   count(port_of_departure, citizenship_country) %>% 
