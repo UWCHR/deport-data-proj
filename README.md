@@ -27,4 +27,5 @@ The repository is divided into separate tasks which follow a regular structure; 
 ##  To-do
 
 - [ ] Document repository setup and task flow in code (e.g., rename import datasets, create downstream symlinks and folders not included in Git repo, etc.)
+- [ ] Dataset import/cleaning/pre-analysis tasks analogous to those for detentions data
 - [ ] Set up tasks for publishing descriptive analysis notebooks.
