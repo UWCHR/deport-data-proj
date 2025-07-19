@@ -25,7 +25,7 @@ p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, r
 
 ```{r setup_encounters, message=FALSE, warning=FALSE, include=TRUE}
 
-file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Encounters_FINAL_unprotected.xlsx"
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Encounters.xlsx"
 
 encounter_df_1 <- read_excel(here('analyze', 'input', file), sheet=1, skip=6) %>%
   janitor::clean_names() %>%
@@ -46,7 +46,7 @@ encounter_ids <- unique(encounter_df$unique_identifier)
 
 ```{r setup_detainers}
 
-file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Detainers_LESA-STU_FINAL_unprotected.xlsx"
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Detainers.xlsx"
 
 detainer_df<- read_excel(here('analyze', 'input', file), skip=6) %>% 
   janitor::clean_names()
@@ -60,9 +60,9 @@ detainer_ids <- unique(detainer_df$unique_identifier)
 
 ```{r setup_arrests, message=FALSE, warning=FALSE, include=TRUE}
 
-file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests_LESA-STU_FINAL_unprotected.xlsx"
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests.xlsx"
 
-arrest_df<- read_excel(here('analyze', 'input', file), skip=5) %>% 
+arrest_df<- read_excel(here('analyze', 'input', file), skip=6) %>% 
   janitor::clean_names()
 
 arrest_df <- arrest_df %>% 
@@ -101,12 +101,12 @@ detention_ids <- unique(detention_df$unique_identifier)
 
 ```{r setup_removals, message=FALSE, warning=FALSE, include=TRUE}
 
-file <- "2025-ICLI-00019_2024-ICFO-39357_ICE_Removals_LESA-STU_FINAL_2025only_unprotected.xlsx"
+file <- "2025-ICLI-00019_2024-ICFO-39357_ICE_Removals_2025.xlsx"
 
-removals_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
+removal_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
   janitor::clean_names() %>% filter(!is.na(unique_identifier))
 
-removal_ids <- unique(removals_df$unique_identifier)
+removal_ids <- unique(removal_df$unique_identifier)
 
 ```
 
@@ -158,7 +158,7 @@ dat3 <- arrest_df %>%
   count(yearmon) %>% 
   mutate(type = "arrest")
 
-dat4 <- removals_df %>% 
+dat4 <- removal_df %>% 
   filter(departed_date >= "2023-11-01",
          departed_date <= "2025-05-30") %>% 
   mutate(yearmon = as.yearmon(departed_date)) %>% 
@@ -237,7 +237,7 @@ dat4 <- detention_df %>%
   count(unique_identifier) %>% 
   mutate(type = "detention")
 
-dat5 <- removals_df %>% 
+dat5 <- removal_df %>% 
   filter(!is.na(unique_identifier)) %>% 
   count(unique_identifier) %>% 
   mutate(type = "removal")
@@ -256,7 +256,7 @@ encounter_cols <- names(encounter_df)
 detainer_cols <- names(detainer_df)
 arrest_cols <- names(arrest_df)
 detention_cols <- names(detention_df)
-removal_cols <- names(removals_df)
+removal_cols <- names(removal_df)
 
 shared_cols <- Reduce(intersect, list(encounter_cols, detainer_cols, arrest_cols, detention_cols, removal_cols))
 
@@ -292,7 +292,7 @@ dat4 <- detention_df %>%
   dplyr::select(unique_identifier, gender) %>% 
   mutate(type = "detention")
 
-dat5 <- removals_df %>% 
+dat5 <- removal_df %>% 
   filter(!is.na(unique_identifier)) %>% 
   distinct(unique_identifier, .keep_all = TRUE) %>% 
   dplyr::select(unique_identifier, gender) %>% 
@@ -344,7 +344,7 @@ dat4 <- detention_df %>%
   dplyr::select(unique_identifier, citizenship_country) %>% 
   mutate(type = "detention")
 
-dat5 <- removals_df %>% 
+dat5 <- removal_df %>% 
   filter(!is.na(unique_identifier)) %>% 
   distinct(unique_identifier, .keep_all = TRUE) %>% 
   dplyr::select(unique_identifier, citizenship_country) %>% 
@@ -389,7 +389,7 @@ dat4 <- detention_df %>%
   dplyr::select(unique_identifier, citizenship_country) %>% 
   mutate(type = "detention")
 
-dat5 <- removals_df %>% 
+dat5 <- removal_df %>% 
   filter(!is.na(unique_identifier)) %>% 
   distinct(unique_identifier, .keep_all = TRUE) %>% 
   dplyr::select(unique_identifier, citizenship_country) %>% 
@@ -432,7 +432,7 @@ dat4 <- detention_df %>%
   dplyr::select(unique_identifier, final_order_date) %>% 
   mutate(type = "detention")
 
-dat5 <- removals_df %>% 
+dat5 <- removal_df %>% 
   filter(!is.na(unique_identifier)) %>% 
   distinct(unique_identifier, .keep_all = TRUE) %>% 
   dplyr::select(unique_identifier, final_order_date) %>% 
@@ -475,7 +475,7 @@ dat4 <- detention_df %>%
   dplyr::select(unique_identifier, final_program) %>% 
   mutate(type = "detention")
 
-dat5 <- removals_df %>% 
+dat5 <- removal_df %>% 
   filter(!is.na(unique_identifier)) %>% 
   distinct(unique_identifier, .keep_all = TRUE) %>% 
   dplyr::select(unique_identifier, final_program) %>% 
@@ -535,7 +535,7 @@ dat4 <- detention_df %>%
   dplyr::select(unique_identifier, case_category) %>% 
   mutate(type = "detention")
 
-dat5 <- removals_df %>% 
+dat5 <- removal_df %>% 
   filter(!is.na(unique_identifier)) %>% 
   distinct(unique_identifier, .keep_all = TRUE) %>% 
   dplyr::select(unique_identifier, case_category) %>% 

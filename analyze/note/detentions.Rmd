@@ -404,9 +404,9 @@ p2
 
 ```{r get_wa_arrests}
 
-file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests_LESA-STU_FINAL_unprotected.xlsx"
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests.xlsx"
 
-arr <- read_excel(here('analyze', 'input', file), skip=5) %>% 
+arr <- read_excel(here('analyze', 'input', file), skip=6) %>% 
   janitor::clean_names()
 
 arr <- arr %>% 
@@ -754,5 +754,132 @@ p2 <- wa_bookins %>%
        subtitle = "Since Jan. 2025")
 
 p2
+
+```
+
+
+```{r natl_headcount_per_facil}
+
+headcount_df <- read_delim(here::here('detain-headcount', 'output', 'headcount_detloc_nov23-jun25.csv.gz'), delim='|')
+
+cscnwwa <- headcount_df %>% 
+  filter(detention_facility_code == "CSCNWWA")
+
+```
+
+```{r 24_hr_headcounter_setup, message=FALSE, warning=FALSE, include=TRUE}
+
+# This is intended to be a 24-hour inclusive population count, versus midnight headcount
+
+# Transform data to "fill in" missing `detention_book_out_date_time` values
+# in order to account for ongoing detention stays at time of release of data
+max_date <- max(df$stay_book_out_date_time, na.rm=TRUE)
+
+df <- df %>%
+  mutate(detention_book_out_date_time_min = 
+           case_when(is.na(detention_book_out_date_time) ~ max_date,
+                     TRUE ~ detention_book_out_date_time))
+
+# Define timeline for calculation of daily detained population
+timeline_start <- date(min(df$stay_book_in_date_time, na.rm=TRUE))
+timeline_end <- date(max(df$stay_book_out_date_time, na.rm=TRUE))
+timeline <- seq(timeline_start, timeline_end, by='day')
+
+# Function counts all in-range detention placement records in dataset `df` for a
+# given `date` by a given grouping variable `var`
+headcounter_24hr <- function(date, df, group_vars) {
+  
+  in_range <- df[date(df$book_in_date_time) <= date(date) & date(df$detention_book_out_date_time_min) > date(date),]
+  
+  in_range %>% 
+    group_by(across(all_of(group_vars))) %>% 
+    summarize(n = n()) %>% 
+    complete(fill = list(n = 0)) %>% 
+    mutate(date=date)
+  
+  }
+
+```
+
+```{r cscnwwa_24_hr_headcount}
+
+# Generate limited sample dataset
+temp_df <- df %>%
+  filter(detention_facility_code == "CSCNWWA")
+
+# Apply function to timeline
+cscnwwa_24_hr <- lapply(timeline, headcounter_24hr, df=temp_df, group_vars=c('detention_facility_code'))
+
+
+# Transform output into data frame
+cscnwwa_24_hr <- map_dfr(cscnwwa_24_hr, bind_rows)
+
+```
+
+Is this right? Why would 24-hr inclusive headcount ever be lower than midnight headcount? Double check logics here and in headcount script
+
+```{r compare_headcounts}
+
+cscnwwa <- cscnwwa %>% 
+  mutate(type = "headcount")
+
+cscnwwa_24_hr <- cscnwwa_24_hr %>% 
+  mutate(type = "24-hr")
+
+dat <- rbind(cscnwwa, cscnwwa_24_hr)
+
+dat_wide <- dat %>% 
+  pivot_wider(id_cols = "date", names_from="type", values_from="n") %>% 
+  mutate(diff = `24-hr` - headcount)
+
+p1 <- dat %>% 
+  ggplot(aes(x=date, y = n, color = type)) +
+  geom_line()
+
+p1
+
+p2 <- dat_wide %>% 
+  ggplot(aes(x = date , y=diff)) +
+  geom_line()
+
+p2
+
+```
+
+```{r geotrack}
+
+geotrack <- read_delim(here::here('analyze', 'hand', 'cscnwwa_geo_track.csv'), delim='|') %>% 
+  mutate(detention_facility_code = "CSCNWWA")
+
+cscnwwa_2025 <- cscnwwa %>% 
+  mutate(type = "headcount") %>% 
+  filter(date >= "2025-01-01")
+
+dat <- rbind(cscnwwa_2025, geotrack)
+
+dat_wide <- dat %>% 
+  pivot_wider(id_cols = "date", names_from="type", values_from="n") %>% 
+  mutate(diff = geo_track - headcount,
+         week = week(date),
+         wday = wday(date))
+
+p1 <- dat %>% 
+  ggplot(aes(x=date, y = n, color = type)) +
+  geom_line()
+
+p1
+
+p2 <- dat_wide %>% 
+  ggplot(aes(x = date , y=diff)) +
+  geom_line()
+
+p2
+
+p3 <- dat_wide %>% 
+  filter(date < "2025-03-01") %>% 
+  ggplot(aes(x = wday , y=diff, color = week)) +
+  geom_line(aes(group = week))
+
+p3
 
 ```
