@@ -177,62 +177,81 @@ shared_cols <- Reduce(intersect, list(encounter_cols, detainer_cols, arrest_cols
 
 ```{r long_record}
 
-id <- "b970c968ba8babd9b92ff3fd739fe30232666d59"
+lookup_enforcement <- function(id_to_search) {
 
-encounter_recs <- encounter_df %>% 
-  mutate(date = as_datetime(event_date),
-         aor = responsible_aor,
-         loc = responsible_site) %>% 
-  filter(unique_identifier == id) %>% 
-  dplyr::select(unique_identifier, date, aor, loc) %>% 
-  mutate(type = "encounter")
+  encounter_recs <- encounter_df %>% 
+    mutate(date = as_datetime(event_date),
+           aor = responsible_aor,
+           loc = responsible_site) %>% 
+    filter(unique_identifier == id_to_search) %>% 
+    dplyr::select(unique_identifier, date, aor, loc, ) %>% 
+    mutate(type = "encounter")
+  
+  detainer_recs <- detainer_df %>% 
+    mutate(date = as_datetime(detainer_prepare_date),
+           aor = facility_aor,
+           loc = detention_facility) %>% 
+    filter(unique_identifier == id_to_search) %>% 
+    dplyr::select(unique_identifier, date, aor, loc, ) %>% 
+    mutate(type = "detainer")
+  
+  arrest_recs <- arrest_df %>% 
+    mutate(date = as_datetime(apprehension_date),
+           aor = apprehension_aor,
+           loc = apprehension_state) %>% 
+    filter(unique_identifier == id_to_search) %>% 
+    dplyr::select(unique_identifier, date, aor, loc, ) %>% 
+    mutate(type = "arrest")
+  
+  detention_book_in_recs <- detention_df %>% 
+    mutate(date = as_datetime(book_in_date_time),
+           aor = "",
+           loc = detention_facility) %>% 
+    filter(unique_identifier == id_to_search) %>% 
+    dplyr::select(unique_identifier, date, aor, loc, ) %>% 
+    mutate(type = "detention book-in")
+  
+  detention_book_out_recs <- detention_df %>% 
+    mutate(date = as_datetime(detention_book_out_date_time),
+           aor = "",
+           loc = detention_facility) %>% 
+    filter(unique_identifier == id_to_search) %>% 
+    dplyr::select(unique_identifier, date, aor, loc, ) %>% 
+    mutate(type = "detention book-out")
+  
+  detention_recs <- rbind(detention_book_in_recs, detention_book_out_recs) %>% 
+    arrange(date)
+  
+  removal_recs <- removal_df %>% 
+    mutate(date = as_datetime(departed_date),
+           aor = docket_aor,
+           loc = port_of_departure) %>% 
+    filter(unique_identifier == id_to_search) %>% 
+    dplyr::select(unique_identifier, date, aor, loc, ) %>% 
+    mutate(type = "removal")
+  
+  enforce_history <- rbind(encounter_recs,
+                           detainer_recs,
+                           arrest_recs,
+                           detention_recs,
+                           removal_recs)
 
-detainer_recs <- detainer_df %>% 
-  mutate(date = as_datetime(detainer_prepare_date),
-         aor = facility_aor,
-         loc = detention_facility) %>% 
-  filter(unique_identifier == id) %>% 
-  dplyr::select(unique_identifier, date, aor, loc) %>% 
-  mutate(type = "detainer")
+  return(enforce_history)
 
-arrest_recs <- arrest_df %>% 
-  mutate(date = as_datetime(apprehension_date),
-         aor = apprehension_aor,
-         loc = apprehension_state) %>% 
-  filter(unique_identifier == id) %>% 
-  dplyr::select(unique_identifier, date, aor, loc) %>% 
-  mutate(type = "arrest")
+  }
 
-detention_book_in_recs <- detention_df %>% 
-  mutate(date = as_datetime(book_in_date_time),
-         aor = "",
-         loc = detention_facility) %>% 
-  filter(unique_identifier == id) %>% 
-  dplyr::select(unique_identifier, date, aor, loc) %>% 
-  mutate(type = "detention book-in")
+```
 
-detention_book_out_recs <- detention_df %>% 
-  mutate(date = as_datetime(detention_book_out_date_time),
-         aor = "",
-         loc = detention_facility) %>% 
-  filter(unique_identifier == id) %>% 
-  dplyr::select(unique_identifier, date, aor, loc) %>% 
-  mutate(type = "detention book-out")
+```{r}
 
-removal_recs <- removal_df %>% 
-  mutate(date = as_datetime(departed_date),
-         aor = docket_aor,
-         loc = port_of_departure) %>% 
-  filter(unique_identifier == id) %>% 
-  dplyr::select(unique_identifier, date, aor, loc) %>% 
-  mutate(type = "removal")
+gitmo_1 <- lookup_enforcement("32ecf71f8c5c1317db065c56ccb0799726210e10")
+gitmo_2 <- lookup_enforcement("404ddf03e7dbc57a5e0358fa289e5ddc57c28ec8")
+gitmo_3 <- lookup_enforcement("b5b6f878e614b5051994b19ae62442285d8e5141")
+gitmo_4 <- lookup_enforcement("7ac85e0070dc9867e573f87a917e9f45f79abe68")
+gitmo_5 <- lookup_enforcement("c4fb041921bf0add3a8e4ac7316042eae45ba96c")
 
-enforce_history <- rbind(encounter_recs,
-                         detainer_recs,
-                         arrest_recs,
-                         detention_book_in_recs,
-                         detention_book_out_recs,
-                         removal_recs) %>% 
-  arrange(date)
+temp <- rbind(gitmo_1, gitmo_2, gitmo_3, gitmo_4, gitmo_5)
+
+write_delim(temp, here::here('analyze', 'output', 'draft_enforcement_history.csv'), delim=',', na="")
 
 ```
