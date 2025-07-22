@@ -25,9 +25,9 @@ Note arrests includes only ICE arrests.
 
 ```{r setup_arrests, message=FALSE, warning=FALSE, include=TRUE}
 
-file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests_LESA-STU_FINAL_unprotected.xlsx"
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests.xlsx"
 
-arrest_df<- read_excel(here('analyze', 'input', file), skip=5) %>% 
+arrest_df<- read_excel(here('analyze', 'input', file), skip=6) %>% 
   janitor::clean_names()
 
 arrest_df <- arrest_df %>% 
@@ -49,7 +49,7 @@ Note removals includes ICE and CBP apprehensions, shorter timeline.
 
 ```{r setup_removals, message=FALSE, warning=FALSE, include=TRUE}
 
-file <- "2025-ICLI-00019_2024-ICFO-39357_ICE_Removals_LESA-STU_FINAL_2025only_unprotected.xlsx"
+file <- "2025-ICLI-00019_2024-ICFO-39357_ICE_Removals_2025.xlsx"
 
 removals_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
   janitor::clean_names() %>% 
@@ -298,11 +298,20 @@ plotly::ggplotly(p1)
 
 ```
 
-```{r}
+```{r dat_sea_basic}
 
-pending <- c('2A', '2B', '8A', '8B', '8D')
-benefit <- c('5C', '5D')
-expedited_admin_rein <- c('8F', '8G', '8H', '8I', '11', '16')
+dat_sea <- removals_df %>% 
+  filter(docket_aor == "Seattle Area of Responsibility") %>% 
+  mutate(case_category_group = case_when(str_detect(case_category, paste0(pending, collapse="|")) ~ "pending case",
+                                         str_detect(case_category, paste0(benefit, collapse="|")) ~ "benefit blocking deport",
+                                         str_detect(case_category, paste0(expedited_admin_rein, collapse="|")) ~ "lack of due process",
+                                         TRUE ~ "all other categories"
+                                         )) %>% 
+  count(case_category_group)
+
+```
+
+```{r}
 
 dat_natl <- removals_df %>% 
   mutate(month = floor_date(departed_date, "month"),
@@ -380,10 +389,6 @@ plotly::ggplotly(p1)
 
 ```{r}
 
-pending <- c('2A', '2B', '8A', '8B', '8D')
-benefit <- c('5C', '5D')
-expedited_admin_rein <- c('8F', '8G', '8H', '8I', '11', '16')
-
 dat_natl <- arrest_df %>% 
     filter(!is.na(departed_date),
           departed_date > "2023-10-31") %>% 
@@ -428,10 +433,6 @@ plotly::ggplotly(p1)
 ```
 
 ```{r}
-
-pending <- c('2A', '2B', '8A', '8B', '8D')
-benefit <- c('5C', '5D')
-expedited_admin_rein <- c('8F', '8G', '8H', '8I', '11', '16')
 
 dat_natl <- arrest_df %>% 
   filter(!is.na(departed_date),
@@ -511,7 +512,7 @@ write_csv(tab2, here('analyze', 'output', 'case_category_tab2.csv'), na = "")
 ```
 
 
-# Arrests X removals
+# Arrests X removals comparison
 
 Minority (but not insignificant quantity) of unique ids appearing in both arrests and removals have inconsistent `case_status` and/or `case_category` values. This might not be unexpected if arrests and removals datasets were generated at different times.
 

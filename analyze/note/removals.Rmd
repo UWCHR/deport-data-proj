@@ -31,7 +31,7 @@ p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, r
 
 ```{r setup_encounters, message=FALSE, warning=FALSE, include=TRUE}
 
-# file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Encounters_FINAL_unprotected.xlsx"
+# file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Encounters.xlsx"
 # 
 # encounter_df_1 <- read_excel(here('analyze', 'input', file), sheet=1, skip=6) %>%
 #   janitor::clean_names() %>%
@@ -52,7 +52,7 @@ p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, r
 
 ```{r setup_detainers}
 
-# file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Detainers_LESA-STU_FINAL_unprotected.xlsx"
+# file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Detainers.xlsx"
 # 
 # detainer_df<- read_excel(here('analyze', 'input', file), skip=6) %>% 
 #   janitor::clean_names()
@@ -66,12 +66,12 @@ p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, r
 
 ```{r setup_arrests, message=FALSE, warning=FALSE, include=TRUE}
 
-file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests_LESA-STU_FINAL_unprotected.xlsx"
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests.xlsx"
 
-arrest_df<- read_excel(here('analyze', 'input', file), skip=5) %>%
+arrest_df<- read_excel(here('analyze', 'input', file), skip=6) %>% 
   janitor::clean_names()
 
-arrest_df <- arrest_df %>%
+arrest_df <- arrest_df %>% 
   mutate(apprehension_date = as.Date(apprehension_date)) |>
   mutate(apprehension_method = fct(apprehension_method)) |>
   mutate(criminality = apprehension_criminality == "1 Convicted Criminal") |>
@@ -79,6 +79,9 @@ arrest_df <- arrest_df %>%
   filter(!is.na(unique_identifier))
 
 arrest_ids <- unique(arrest_df$unique_identifier)
+
+arrests_with_removal <- arrest_df %>% 
+  filter(!is.na(departed_date))
 
 sea_aor_arrests <- arrest_df %>% 
   filter(apprehension_aor == "Seattle Area of Responsibility")
@@ -90,39 +93,71 @@ wa_arrests <- arrest_df %>%
 
 ```{r setup_detention, message=FALSE, warning=FALSE, include=TRUE}
 
-# file <- "ice_detentions_nov23-jun25.csv.gz"
-# 
-# detention_df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
-#   mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
-#          book_in_date_time = ymd_hms(book_in_date_time),
-#          detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
-#          stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
-#          stay_book_out_date = ymd(stay_book_out_date),
-#          book_in_fy = substr(quarter(book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4),
-#          stay_book_in_fy = substr(quarter(stay_book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4)) %>% filter(!is.na(unique_identifier))
-# 
-# 
-# detention_df <- detention_df %>% 
-#   group_by(unique_identifier) %>% 
-#   arrange(stay_book_in_date_time, book_in_date_time, unique_identifier) %>% 
-#   ungroup()
-# 
-# detention_ids <- unique(detention_df$unique_identifier)
+file <- "ice_detentions_nov23-jun25.csv.gz"
+
+detention_df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
+  mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
+         book_in_date_time = ymd_hms(book_in_date_time),
+         detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
+         stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
+         stay_book_out_date = ymd(stay_book_out_date),
+         book_in_fy = substr(quarter(book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4),
+         stay_book_in_fy = substr(quarter(stay_book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4)) %>% filter(!is.na(unique_identifier))
+
+
+detention_df <- detention_df %>% 
+  group_by(unique_identifier) %>% 
+  arrange(stay_book_in_date_time, book_in_date_time, unique_identifier) %>% 
+  ungroup()
+
+detention_ids <- unique(detention_df$unique_identifier)
+
+detention_removals <- detention_df %>% 
+  filter(stay_release_reason == "Removed")
+
+cscnwwa_detentions <- detention_df %>% 
+  filter(detention_facility_code == "CSCNWWA")
+
+# cscnwwa_ids <- unique(cscnwwa_detentions$unique_identifier)
 
 ```
 
 ```{r setup_removals, message=FALSE, warning=FALSE, include=TRUE}
 
-file <- "2025-ICLI-00019_2024-ICFO-39357_ICE_Removals_LESA-STU_FINAL_2025only_unprotected.xlsx"
+file <- "2025-ICLI-00019_2024-ICFO-39357_ICE_Removals_2025.xlsx"
 
-removals_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
+removal_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
   janitor::clean_names() %>% filter(!is.na(unique_identifier))
 
-removal_ids <- unique(removals_df$unique_identifier)
+removal_ids <- unique(removal_df$unique_identifier)
 
-removals_df <- removals_df %>% 
+removal_df <- removal_df %>% 
   mutate(wa_arrest = unique_identifier %in% wa_arrests$unique_identifier,
-         sea_aor_arrest = unique_identifier %in% sea_aor_arrests$unique_identifier)
+         sea_aor_arrest = unique_identifier %in% sea_aor_arrests$unique_identifier,
+         nwdc_detention = unique_identifier %in% cscnwwa_detentions$unique_identifier)
+
+```
+
+```{r compare_sets}
+
+data_levels <- c("arrest", "detention", "removal")
+
+sets <- list("arrests" = unique(arrests_with_removal$unique_identifier),
+             "detentions" = unique(detention_removals$unique_identifier),
+             "removals" = removal_ids)
+
+# p1 <- ggVennDiagram(x = sets,
+#                     color = name,
+#                     label = "count") +
+#   scale_fill_gradient(low = "#F4FAFE", high = "#4981BF")
+# 
+# p1
+
+p2 <- ggVennDiagram(x = sets,
+              force_upset = TRUE, order.set.by = "name", order.intersect.by = "size"
+              )
+
+p2 
 
 ```
 
@@ -130,12 +165,12 @@ Strong weekly periodicity
 
 ```{r}
 
-dat <- removals_df %>% 
+dat <- removal_df %>% 
   count(departed_date)
 
 p1 <- dat %>% 
   ggplot(aes(x = departed_date, y = n)) +
-  geom_col()
+  geom_line()
   
 p1
 
@@ -143,7 +178,7 @@ p1
 
 ```{r}
 
-dat <- removals_df %>% 
+dat <- removal_df %>% 
   mutate(week = floor_date(departed_date, "week", week_start = "Monday")) %>% 
   count(week)
 
@@ -159,7 +194,7 @@ Note HQ AOR important for removals
 
 ```{r}
 
-dat <- removals_df %>% 
+dat <- removal_df %>% 
   mutate(week = floor_date(departed_date, "week", week_start = "Monday"),
          docket_aor = str_replace(docket_aor, " Area of Responsibility", "")) %>% 
   count(week, docket_aor)
@@ -177,7 +212,7 @@ Most removals Tues-Fri
 
 ```{r}
 
-dat <- removals_df %>% 
+dat <- removal_df %>% 
   mutate(week = floor_date(departed_date, "week", week_start = "Monday"),
          weekday = wday(departed_date, week_start = "Monday", label=TRUE, abbr=TRUE),
          weeknum = week(departed_date),
@@ -196,7 +231,7 @@ Removals by weekday and week in 2025. Not very interesting
 
 ```{r}
 
-dat <- removals_df %>% 
+dat <- removal_df %>% 
   mutate(week = floor_date(departed_date, "week", week_start = "Monday"),
          weekday = wday(departed_date, week_start = "Monday", label=TRUE, abbr=TRUE),
          weeknum = week(departed_date),
@@ -213,7 +248,7 @@ p1
 
 ```{r docket_aor}
 
-tab <- removals_df %>% 
+tab <- removal_df %>% 
   count(docket_aor) %>% 
   arrange(desc(n))
 
@@ -221,7 +256,7 @@ tab <- removals_df %>%
 
 ```{r sea_removals}
 
-p0 <- removals_df %>% 
+p0 <- removal_df %>% 
   filter(docket_aor == "Seattle Area of Responsibility") %>% 
   mutate(week = floor_date(departed_date, "week", week_start = "Monday")) %>% 
   count(week,) %>% 
@@ -230,7 +265,7 @@ p0 <- removals_df %>%
 
 p0
 
-p1 <- removals_df %>% 
+p1 <- removal_df %>% 
   filter(docket_aor == "Seattle Area of Responsibility") %>% 
   mutate(week = floor_date(departed_date, "week", week_start = "Monday")) %>% 
   count(week, sea_aor_arrest) %>% 
@@ -239,7 +274,7 @@ p1 <- removals_df %>%
 
 p1
 
-p2 <- removals_df %>% 
+p2 <- removal_df %>% 
   filter(docket_aor == "Seattle Area of Responsibility") %>% 
   mutate(week = floor_date(departed_date, "week", week_start = "Monday")) %>% 
   count(week, wa_arrest) %>% 
@@ -248,21 +283,59 @@ p2 <- removals_df %>%
 
 p2
 
+p3 <- removal_df %>% 
+  filter(docket_aor == "Seattle Area of Responsibility") %>% 
+  mutate(week = floor_date(departed_date, "week", week_start = "Monday")) %>% 
+  count(week, nwdc_detention) %>% 
+  ggplot(aes(x = week, y = n, fill = nwdc_detention)) +
+  geom_col()
+
+p3
+
+```
+
+```{r tab_docket}
+
+tab_docket <- removal_df %>%
+  count(docket_aor)
+
+tab_docket_wa <- removal_df %>%
+  count(docket_aor, wa_arrest)
+
+tab_docket_nwdc <- removal_df %>%
+  count(docket_aor, nwdc_detention)
+
+```
+
+```{r}
+
+dat <- removal_df %>% 
+  filter(wa_arrest == TRUE) %>% 
+  count(docket_aor)
+
+p1 <- dat %>% 
+  mutate(docket_aor = str_replace(docket_aor, " Area of Responsibility", "")) %>% 
+  ggplot(aes(y = docket_aor, x = n)) +
+  geom_col() +
+  labs(title = "WA ICE arrests by removal docket AOR")
+
+p1
+
 ```
 
 ```{r docket_aor_port_of_depart}
 
-tab_sea_pod <- removals_df %>% 
+tab_sea_pod <- removal_df %>% 
   filter(docket_aor == "Seattle Area of Responsibility") %>% 
   count(port_of_departure)
 
-tab_sea_pod_2025 <- removals_df %>% 
+tab_sea_pod_2025 <- removal_df %>% 
   filter(docket_aor == "Seattle Area of Responsibility",
          departed_date >= "2025-01-20") %>% 
   count(port_of_departure) %>% 
   arrange(desc(n))
 
-tab_sea_pod_2025 <- removals_df %>% 
+tab_sea_pod_2025_india <- removal_df %>% 
   filter(docket_aor == "Seattle Area of Responsibility",
          departed_date >= "2025-01-20") %>% 
   count(port_of_departure, citizenship_country) %>% 
@@ -272,4 +345,119 @@ tab_sea_pod_2025 <- removals_df %>%
 
 ```
 
+```{r docket_aor_port_of_depart}
 
+tab_sea_cit <- removal_df %>% 
+  filter(docket_aor == "Seattle Area of Responsibility") %>% 
+  count(citizenship_country)
+
+tab_sea_dep <- removal_df %>% 
+  filter(docket_aor == "Seattle Area of Responsibility") %>% 
+  count(departure_country)
+
+tab_sea_cit_dep <- removal_df %>% 
+  filter(docket_aor == "Seattle Area of Responsibility") %>% 
+  count(citizenship_country, departure_country)
+
+```
+
+## Comparing various datasets/subsets for removal trends over time
+
+```{r historic_removals}
+
+old_removals <- read_delim(here::here("analyze", "input", "ice_removals_fy12-23ytd.csv.gz"), delim = '|') %>% 
+  mutate(departed_date = as.Date(departed_date, format = "%m/%d/%Y"))
+
+old_removals <- old_removals %>% 
+  mutate(month = floor_date(departed_date, "month"))
+
+new_removals <- removal_df %>% 
+  mutate(month = floor_date(departed_date, "month"))
+
+dat1 <- old_removals %>% 
+  count(month, area_of_responsibility) %>% 
+  mutate(type = "uwchr-removals")
+  
+dat2 <- new_removals %>% 
+  count(month, area_of_responsibility) %>% 
+  mutate(type = "ddp-removals")
+
+dat <- rbind(dat1, dat2)
+
+p1 <- dat %>% 
+  group_by(month) %>% 
+  summarize(n = sum(n)) %>% 
+  ggplot(aes(x = month, y = n)) +
+  geom_col()
+
+p1
+
+```
+
+```{r}
+
+dat1 <- old_removals %>% 
+  count(month, area_of_responsibility) %>% 
+  mutate(type = "uwchr-removals")
+  
+dat2 <- new_removals %>% 
+  count(month, area_of_responsibility) %>% 
+  mutate(type = "ddp-removals")
+
+dat <- rbind(dat1, dat2)
+
+p1 <- dat %>% 
+  mutate(area_of_responsibility = str_replace(area_of_responsibility, " Area of Responsibility", "")) %>% 
+  group_by(month, area_of_responsibility) %>% 
+  summarize(n = sum(n)) %>% 
+  ggplot(aes(x = month, y = n)) +
+  geom_col() +
+  facet_wrap(~area_of_responsibility)
+
+p1
+
+```
+
+```{r historic_removals}
+
+old_removals <- old_removals %>% 
+  mutate(month = floor_date(departed_date, "month"))
+
+new_removals <- removal_df %>% 
+  mutate(month = floor_date(departed_date, "month"))
+
+det_removals <- detention_df %>% 
+  filter(detention_release_reason == "Removed") %>% 
+  mutate(month = floor_date(departed_date, "month"))
+
+arr_removals <- arrests_with_removal %>% 
+  mutate(month = floor_date(departed_date, "month"))
+
+dat1 <- old_removals %>% 
+  count(month) %>% 
+  mutate(type = "uwchr-removals")
+  
+dat2 <- new_removals %>% 
+  count(month) %>% 
+  mutate(type = "ddp-removals")
+
+dat3 <- det_removals %>% 
+  count(month) %>% 
+  mutate(type = "ddp-detentions")
+
+dat4 <- arr_removals %>% 
+  count(month) %>% 
+  mutate(type = "ddp-arrests")
+
+dat <- rbind(dat1, dat2, dat3, dat4)
+
+p1 <- dat %>% 
+  filter(month >= "2011-10-01") %>% 
+  group_by(month, type) %>% 
+  summarize(n = sum(n)) %>% 
+  ggplot(aes(x = month, y = n, fill = type)) +
+  geom_col(position='dodge')
+
+p1
+
+```
