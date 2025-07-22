@@ -20,9 +20,9 @@ library(pacman)
 
 p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl)
 
-file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests_LESA-STU_FINAL_unprotected.xlsx"
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests.xlsx"
 
-arr <- read_excel(here('analyze', 'input', file), skip=5) %>% 
+arrest_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
   janitor::clean_names() %>% 
   mutate(apprehension_date = as.Date(apprehension_date)) |>
   mutate(apprehension_method = fct(apprehension_method)) |>
@@ -36,7 +36,7 @@ arr <- read_excel(here('analyze', 'input', file), skip=5) %>%
 ```{r natl_trend}
 
 figure_1 <-
-  arr |>
+  arrest_df |>
     filter(week > "2023-08-28",
          week < "2025-06-09") |>
   count(week) |>
@@ -46,9 +46,9 @@ geom_vline(data = NULL, xintercept = as.Date("2025-01-20"), color = gray(0.2), l
   geom_line(linewidth = 0.8) +
   scale_y_continuous(labels = scales::comma) +
   coord_cartesian(clip = "off") +
-  labs(title = "Weekly Arrests by Immigration and Customs Enforcement (ICE)",
+  labs(title = "Weekly arrests by Immigration and Customs Enforcement (ICE)",
        subtitle = "Nationwide",
-       x = "", y = "Number of Arrests per Week", caption = "Source: ICE via FOIA request") +
+       x = "", y = "Number of arrests per Week", caption = "Source: ICE via FOIA request") +
   theme_minimal() +
   theme(plot.margin = margin(5, 0, 5, 5),
         plot.title = element_text(margin = margin(0,0,10,0)),
@@ -61,7 +61,7 @@ geom_vline(data = NULL, xintercept = as.Date("2025-01-20"), color = gray(0.2), l
 figure_1
 
 figure_2 <-
-  arr |>
+  arrest_df |>
   mutate(week = floor_date(apprehension_date, "week", week_start = "Monday")) |>
   filter(week > "2023-08-28",
          week < "2025-06-09") |>
@@ -74,7 +74,7 @@ figure_2 <-
   scale_y_continuous(labels = scales::comma) +
   scale_color_manual(values = c("#0072B2", "#D55E00")) +
   coord_cartesian(clip = "off") +
-  labs(color = "", title = "Weekly Arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by Criminal Conviction Status", x = "", y = "Number of Arrests per Week", caption = "Source: ICE via FOIA request") +
+  labs(color = "", title = "Weekly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by Criminal Conviction Status", x = "", y = "Number of arrests per Week", caption = "Source: ICE via FOIA request") +
   theme_minimal() +
   theme(plot.margin = margin(5, 0, 5, 5),
         plot.title = element_text(margin = margin(0,0,5,0)),
@@ -92,7 +92,7 @@ figure_2
 
 ```{r sea_trend}
 
-sea <- arr %>% 
+sea <- arrest_df %>% 
   filter(apprehension_aor == "Seattle Area of Responsibility")
 
 figure_1 <-
@@ -106,9 +106,9 @@ geom_vline(data = NULL, xintercept = as.Date("2025-01-20"), color = gray(0.2), l
   geom_line(linewidth = 0.8) +
   scale_y_continuous(labels = scales::comma) +
   coord_cartesian(clip = "off") +
-  labs(title = "Weekly Arrests by Immigration and Customs Enforcement (ICE)",
+  labs(title = "Weekly arrests by Immigration and Customs Enforcement (ICE)",
        subtitle = "Seattle Area of Responsibility",
-       x = "", y = "Number of Arrests per Week", caption = "Source: ICE via FOIA request") +
+       x = "", y = "Number of arrests per Week", caption = "Source: ICE via FOIA request") +
   theme_minimal() +
   theme(plot.margin = margin(5, 0, 5, 5),
         plot.title = element_text(margin = margin(0,0,10,0)),
@@ -134,7 +134,67 @@ figure_2 <-
   scale_y_continuous(labels = scales::comma, limits = c(0, 100)) +
   scale_color_manual(values = c("#0072B2", "#D55E00")) +
   coord_cartesian(clip = "off") +
-  labs(color = "", title = "Weekly Arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by Criminal Conviction Status (Seattle AOR)", x = "", y = "Number of Arrests per Week", caption = "Source: ICE via FOIA request") +
+  labs(color = "", title = "Weekly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by Criminal Conviction Status (Seattle AOR)", x = "", y = "Number of arrests per Week", caption = "Source: ICE via FOIA request") +
+  theme_minimal() +
+  theme(plot.margin = margin(5, 0, 5, 5),
+        plot.title = element_text(margin = margin(0,0,5,0)),
+        plot.subtitle = element_text(margin = margin(0, 0, 10, 0)),
+        axis.title.x = element_blank(),
+        legend.margin = margin(0, 0, 0, 0),
+        legend.position = "bottom",
+        axis.title.y = element_text(margin = margin(0, 15, 0, 0)),
+        strip.text = element_text(hjust = 0, size = 12))
+
+figure_2
+
+```
+
+
+```{r wa_trend}
+
+wa <- arrest_df %>% 
+  filter(apprehension_state == "WASHINGTON")
+
+figure_1 <-
+  wa |>
+    filter(week > "2023-08-28",
+         week < "2025-06-09") |>
+  count(week) |>
+  ggplot(aes(week, n)) +
+geom_vline(data = NULL, xintercept = as.Date("2025-01-20"), color = gray(0.2), linetype = "dashed") +
+  annotate("text", x = as.Date("2025-01-20") - days(7), y = 100, label = "Trump II\ninauguration", hjust = 1, size = 3.5, color = gray(0.2)) +
+  geom_line(linewidth = 0.8) +
+  scale_y_continuous(labels = scales::comma) +
+  coord_cartesian(clip = "off") +
+  labs(title = "Weekly arrests by Immigration and Customs Enforcement (ICE)",
+       subtitle = "WA state",
+       x = "", y = "Number of arrests per Week", caption = "Source: ICE via FOIA request") +
+  theme_minimal() +
+  theme(plot.margin = margin(5, 0, 5, 5),
+        plot.title = element_text(margin = margin(0,0,10,0)),
+        axis.title.x = element_blank(),
+        legend.margin = margin(0, 0, 0, 0),
+        legend.position = "bottom",
+        axis.title.y = element_text(margin = margin(0, 15, 0, 0)),
+        strip.text = element_text(hjust = 0, size = 12))
+
+figure_1
+
+figure_2 <-
+  wa |>
+  mutate(week = floor_date(apprehension_date, "week", week_start = "Monday")) |>
+    filter(week > "2023-08-28",
+         week < "2025-06-09") |>
+  mutate(criminality = factor(criminality, levels = c(TRUE, FALSE), labels = c("Criminal conviction", "No criminal conviction"))) |>
+  count(criminality, week) |>
+  ggplot(aes(week, n, color = criminality, group = criminality)) +
+  geom_vline(data = NULL, xintercept = as.Date("2025-01-20"), color = gray(0.2), linetype = "dashed") +
+  annotate("text", x = as.Date("2025-01-20") - days(7), y = 100, label = "Trump II\ninauguration", hjust = 1, size = 3.5, color = gray(0.2)) +
+  geom_line(linewidth = 0.8) +
+  scale_y_continuous(labels = scales::comma, limits = c(0, 100)) +
+  scale_color_manual(values = c("#0072B2", "#D55E00")) +
+  coord_cartesian(clip = "off") +
+  labs(color = "", title = "Weekly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by Criminal Conviction Status (WA state)", x = "", y = "Number of arrests per Week", caption = "Source: ICE via FOIA request") +
   theme_minimal() +
   theme(plot.margin = margin(5, 0, 5, 5),
         plot.title = element_text(margin = margin(0,0,5,0)),
@@ -152,7 +212,7 @@ figure_2
 
 ```{r pre_post_trump_change_method}
 
-dat <- arr %>% 
+dat <- arrest_df %>% 
   mutate(week = floor_date(apprehension_date, "week", week_start = "Monday"),
          trump = apprehension_date >= "2025-01-20") %>% 
   group_by(trump, week, apprehension_method) %>% 
@@ -182,9 +242,9 @@ p2
 
 ```
 
-```{r pre_post_trump_change_method}
+```{r pre_post_trump_change_method_2}
 
-dat1 <- arr %>% 
+dat1 <- arrest_df %>% 
   mutate(week = floor_date(apprehension_date, "week", week_start = "Monday"),
          trump = apprehension_date >= "2025-01-20") %>% 
   group_by(trump, week, apprehension_method) %>% 
@@ -196,7 +256,7 @@ dat1 <- arr %>%
   arrange(desc(pct_change)) %>% 
   mutate(type = "natl")
 
-dat2 <- arr %>% 
+dat2 <- arrest_df %>% 
   filter(apprehension_aor == "Seattle Area of Responsibility") %>% 
   mutate(week = floor_date(apprehension_date, "week", week_start = "Monday"),
          trump = apprehension_date >= "2025-01-20") %>% 
@@ -225,7 +285,7 @@ p1
 
 ```{r pre_post_trump_change_final_program}
 
-dat <- arr %>% 
+dat <- arrest_df %>% 
   mutate(week = floor_date(apprehension_date, "week", week_start = "Monday"),
          trump = apprehension_date >= "2025-01-20") %>% 
   group_by(trump, week, final_program) %>% 
@@ -279,17 +339,17 @@ detention_ids <- unique(detention_df$unique_identifier)
 
 ```
 
-```{r}
+```{r arrest_by_detention_status}
 
-arr <- arr %>% 
+arrest_df <- arrest_df %>% 
   mutate(id_in_det = unique_identifier %in% detention_ids)
 
 figure_1 <-
-  arr |>
+  arrest_df |>
   mutate(week = floor_date(apprehension_date, "week", week_start = "Monday")) |>
       filter(week > "2023-08-28",
          week < "2025-06-09") |>
-  mutate(id_in_det = factor(id_in_det, levels = c(TRUE, FALSE), labels = c("Arrest with detention", "Arrest with no detention"))) |>
+  mutate(id_in_det = factor(id_in_det, levels = c(TRUE, FALSE), labels = c("arrest with detention", "arrest with no detention"))) |>
   count(id_in_det, week) |>
   ggplot(aes(week, n, color = id_in_det, group = id_in_det)) +
   geom_vline(data = NULL, xintercept = as.Date("2025-01-20"), color = gray(0.2), linetype = "dashed") +
@@ -298,7 +358,7 @@ figure_1 <-
   scale_y_continuous(labels = scales::comma) +
   scale_color_manual(values = c("#0072B2", "#D55E00")) +
   coord_cartesian(clip = "off") +
-  labs(color = "", title = "Weekly Arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by whether associated with detention", x = "", y = "Number of Arrests per Week", caption = "Source: ICE via FOIA request") +
+  labs(color = "", title = "Weekly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by whether associated with detention", x = "", y = "Number of arrests per Week", caption = "Source: ICE via FOIA request") +
   theme_minimal() +
   theme(plot.margin = margin(5, 0, 5, 5),
         plot.title = element_text(margin = margin(0,0,5,0)),
@@ -312,12 +372,12 @@ figure_1 <-
 figure_1
 
 figure_2 <-
-  arr |>
+  arrest_df |>
   filter(apprehension_aor == "Seattle Area of Responsibility") %>% 
   mutate(week = floor_date(apprehension_date, "week", week_start = "Monday")) |>
       filter(week > "2023-08-28",
          week < "2025-06-09") |>
-  mutate(id_in_det = factor(id_in_det, levels = c(TRUE, FALSE), labels = c("Arrest with detention", "Arrest with no detention"))) |>
+  mutate(id_in_det = factor(id_in_det, levels = c(TRUE, FALSE), labels = c("arrest with detention", "arrest with no detention"))) |>
   count(id_in_det, week) |>
   ggplot(aes(week, n, color = id_in_det, group = id_in_det)) +
   geom_vline(data = NULL, xintercept = as.Date("2025-01-20"), color = gray(0.2), linetype = "dashed") +
@@ -326,7 +386,7 @@ figure_2 <-
   scale_y_continuous(labels = scales::comma) +
   scale_color_manual(values = c("#0072B2", "#D55E00")) +
   coord_cartesian(clip = "off") +
-  labs(color = "", title = "Weekly Arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by whether associated with detention (SEA AOR)", x = "", y = "Number of Arrests per Week", caption = "Source: ICE via FOIA request") +
+  labs(color = "", title = "Weekly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by whether associated with detention (SEA AOR)", x = "", y = "Number of arrests per Week", caption = "Source: ICE via FOIA request") +
   theme_minimal() +
   theme(plot.margin = margin(5, 0, 5, 5),
         plot.title = element_text(margin = margin(0,0,5,0)),
@@ -341,16 +401,18 @@ figure_2
 
 ```
 
-```{r}
+```{r arrest_by_crim_convict_and_det_status}
 
-figure_1 <-
-  arr |>
+dat_natl <-
+  arrest_df |>
   mutate(week = floor_date(apprehension_date, "week", week_start = "Monday")) |>
       filter(week > "2023-08-28",
          week < "2025-06-09") |>
-  mutate(id_in_det = factor(id_in_det, levels = c(TRUE, FALSE), labels = c("Arrest with detention", "Arrest with no detention")),
+  mutate(id_in_det = factor(id_in_det, levels = c(TRUE, FALSE), labels = c("arrest with detention", "arrest with no detention")),
          criminality = factor(criminality, levels = c(TRUE, FALSE), labels = c("Criminal conviction", "No criminal conviction"))) |>
-  count(id_in_det, criminality, week) |>
+  count(id_in_det, criminality, week)
+
+figure_1 <- dat_natl |>
   ggplot(aes(week, n, color = id_in_det, group = id_in_det)) +
   geom_vline(data = NULL, xintercept = as.Date("2025-01-20"), color = gray(0.2), linetype = "dashed") +
   annotate("text", x = as.Date("2025-01-20") - days(7), y = 100, label = "Trump II\ninauguration", hjust = 1, size = 3.5, color = gray(0.2)) +
@@ -358,7 +420,7 @@ figure_1 <-
   scale_y_continuous(labels = scales::comma) +
   scale_color_manual(values = c("#0072B2", "#D55E00")) +
   coord_cartesian(clip = "off") +
-  labs(color = "", title = "Weekly Arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by whether associated with detention (national)", x = "", y = "Number of Arrests per Week", caption = "Source: ICE via FOIA request") +
+  labs(color = "", title = "Weekly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by whether associated with detention (national)", x = "", y = "Number of arrests per Week", caption = "Source: ICE via FOIA request") +
   theme_minimal() +
   theme(plot.margin = margin(5, 0, 5, 5),
         plot.title = element_text(margin = margin(0,0,5,0)),
@@ -372,15 +434,17 @@ figure_1 <-
 
 figure_1
 
-figure_2 <-
-  arr |>
+dat_sea <-
+  arrest_df |>
   filter(apprehension_aor == "Seattle Area of Responsibility") %>% 
   mutate(week = floor_date(apprehension_date, "week", week_start = "Monday")) |>
       filter(week > "2023-08-28",
          week < "2025-06-09") |>
-  mutate(id_in_det = factor(id_in_det, levels = c(TRUE, FALSE), labels = c("Arrest with detention", "Arrest with no detention")),
+  mutate(id_in_det = factor(id_in_det, levels = c(TRUE, FALSE), labels = c("arrest with detention", "arrest with no detention")),
          criminality = factor(criminality, levels = c(TRUE, FALSE), labels = c("Criminal conviction", "No criminal conviction"))) |>
-  count(id_in_det, criminality, week) |>
+  count(id_in_det, criminality, week)
+
+figure_2 <- dat_sea |>
   ggplot(aes(week, n, color = id_in_det, group = id_in_det)) +
   geom_vline(data = NULL, xintercept = as.Date("2025-01-20"), color = gray(0.2), linetype = "dashed") +
   annotate("text", x = as.Date("2025-01-20") - days(7), y = 100, label = "Trump II\ninauguration", hjust = 1, size = 3.5, color = gray(0.2)) +
@@ -388,7 +452,7 @@ figure_2 <-
   scale_y_continuous(labels = scales::comma) +
   scale_color_manual(values = c("#0072B2", "#D55E00")) +
   coord_cartesian(clip = "off") +
-  labs(color = "", title = "Weekly Arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by whether associated with detention (SEA AOR)", x = "", y = "Number of Arrests per Week", caption = "Source: ICE via FOIA request") +
+  labs(color = "", title = "Weekly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by whether associated with detention (SEA AOR)", x = "", y = "Number of arrests per Week", caption = "Source: ICE via FOIA request") +
   theme_minimal() +
   theme(plot.margin = margin(5, 0, 5, 5),
         plot.title = element_text(margin = margin(0,0,5,0)),
@@ -402,16 +466,17 @@ figure_2 <-
 
 figure_2
 
+write_delim(dat_sea, here::here('analyze', 'output', 'sea_arrests_by_crim_convict_and_det_status.csv'), delim = ',')
 
 ```
 
-```{r}
+```{r arrest_method}
 
-top_methods <- arr %>% 
+top_methods <- arrest_df %>% 
   count(apprehension_method) %>% 
   arrange(desc(n))
 
-p1 <- arr %>% 
+p1 <- arrest_df %>% 
    mutate(week = floor_date(apprehension_date, "week", week_start = "Monday"),
           apprehension_method = case_when(apprehension_method %in% head(top_methods$apprehension_method, 10) ~ apprehension_method,
                                           TRUE ~ "All others"),
@@ -425,7 +490,7 @@ p1 <- arr %>%
   
 plotly::ggplotly(p1)  
 
-p2 <- arr %>% 
+p2 <- arrest_df %>% 
   filter(apprehension_aor == "Seattle Area of Responsibility") %>% 
    mutate(week = floor_date(apprehension_date, "week", week_start = "Monday"),
           apprehension_aor = str_replace(apprehension_aor, " Area of Responsibility", "")) |>
@@ -439,10 +504,10 @@ plotly::ggplotly(p2)
 
 ```
 
-```{r}
+```{r arrest_final_program_aor}
 
 
-p1 <- arr %>% 
+p1 <- arrest_df %>% 
    mutate(week = floor_date(apprehension_date, "week", week_start = "Monday"),
           apprehension_aor = str_replace(apprehension_aor, " Area of Responsibility", "")) |>
       filter(week > "2023-08-28",
@@ -456,9 +521,9 @@ plotly::ggplotly(p1)
 
 ```
 
-```{r }
+```{r apprehension_method_detention_status}
 
-p1 <- arr %>% 
+p1 <- arrest_df %>% 
    mutate(week = floor_date(apprehension_date, "week", week_start = "Monday"),
           apprehension_method = case_when(apprehension_method %in% head(top_methods$apprehension_method, 10) ~ apprehension_method,
                                           TRUE ~ "All others"),
@@ -474,9 +539,9 @@ plotly::ggplotly(p1)
 
 ```
 
-```{r }
+```{r misc}
 
-p1 <- arr %>% 
+p1 <- arrest_df %>% 
    mutate(week = floor_date(apprehension_date, "week", week_start = "Monday"),
           apprehension_aor = str_replace(apprehension_aor, " Area of Responsibility", "")) |>
       filter(week > "2023-08-28",
@@ -486,9 +551,9 @@ p1 <- arr %>%
   geom_line() +
   facet_wrap(~final_program)
   
-plotly::ggplotly(p1)  
+plotly::ggplotly(p1)
 
-p2 <- arr %>% 
+p2 <- arrest_df %>% 
   filter(final_program == "Non-Detained Docket Control") %>% 
    mutate(week = floor_date(apprehension_date, "week", week_start = "Monday"),
           apprehension_aor = str_replace(apprehension_aor, " Area of Responsibility", "")) |>
@@ -502,29 +567,3 @@ p2
 
 ```
 
-```{r}
-
-dat <- arr %>% 
-  mutate(apprehension_aor = str_replace(apprehension_aor, " Area of Responsibility", "")) %>% 
-  filter(apprehension_date >= "2025-04-01",
-         apprehension_date <= "2025-04-30")
-
-p1 <- dat %>% 
-  count(apprehension_aor, apprehension_date) %>% 
-  ggplot(aes(x = apprehension_date, y = n, fill = apprehension_aor)) +
-  geom_col() +
-  facet_wrap(~apprehension_aor)
-
-p1
-
-dat2 <- dat %>% 
-  filter(apprehension_aor %in% c("Miami", "Atlanta")) %>% 
-  count(apprehension_aor, apprehension_date)
-
-p2 <- dat2 %>% 
-  ggplot(aes(x= apprehension_date, y = n, fill = apprehension_aor)) +
-  geom_col()
-
-p2
-
-```
