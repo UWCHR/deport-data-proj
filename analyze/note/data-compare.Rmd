@@ -550,7 +550,7 @@ dat <- dat %>%
 
 p1 <- dat %>%
   count(type, case_category) %>% 
-  mutate(type = factor(type, levels = data_levels) %>% 
+  mutate(type = factor(type, levels = data_levels)) %>% 
   ggplot(aes(x = type, y = n, fill = case_category)) +
   geom_col(position = "fill")
 
