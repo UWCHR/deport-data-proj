@@ -730,8 +730,11 @@ temp <- dat %>%
 
 wa_bookins <- df %>% 
   filter(detention_facility_code %in% wa_facil) %>% 
+  filter(stay_book_in_date_time >= "2023-11-01") %>% 
   mutate(week = floor_date(stay_book_in_date_time, "week", week_start = "Monday"),
          yearmon = as.yearmon(stay_book_in_date_time))
+
+write_delim(wa_bookins, here::here('analyze', 'output', 'wa_bookins.csv'), delim=',')
 
 t1 <- wa_bookins %>% 
   filter(stay_book_in_date_time >= "2025-01-20") %>% 
@@ -764,6 +767,33 @@ headcount_df <- read_delim(here::here('detain-headcount', 'output', 'headcount_d
 
 cscnwwa <- headcount_df %>% 
   filter(detention_facility_code == "CSCNWWA")
+
+wa_facil_headcount <- headcount_df %>% 
+  filter(detention_facility_code %in% wa_facil)
+
+write_delim(wa_facil_headcount, here::here('analyze', 'output', 'wa_facil_headcount.csv'), delim=',')
+
+p1 <- wa_facil_headcount %>% 
+  filter(date >= "2023-11-01",
+         detention_facility_code == "CSCNWWA") %>% 
+  ggplot(aes(x = date, y = n, color = detention_facility_code)) +
+  geom_line() +
+  ylim(0, NA) +
+  labs(title = "Daily detained population",
+      subtitle = "NW ICE PROCESSING CENTER")
+ 
+p1
+
+p2 <- wa_facil_headcount %>% 
+  filter(date >= "2025-01-01",
+         str_detect(detention_facility_code, "HOLD")) %>%
+  ggplot(aes(x = date, y = n, color = detention_facility_code)) +
+  geom_line() +
+  ylim(0, NA) +
+  labs(title = "Daily detained population",
+      subtitle = "WA hold rooms")
+ 
+p2
 
 ```
 
@@ -816,7 +846,7 @@ cscnwwa_24_hr <- map_dfr(cscnwwa_24_hr, bind_rows)
 
 ```
 
-Is this right? Why would 24-hr inclusive headcount ever be lower than midnight headcount? Double check logics here and in headcount script
+Is this right? Why would 24-hr inclusive headcount ever be lower than midnight headcount? Double check logics here and in headcount script. What happens in case of duplicate book-in/out?
 
 ```{r compare_headcounts}
 
@@ -881,5 +911,41 @@ p3 <- dat_wide %>%
   geom_line(aes(group = week))
 
 p3
+
+```
+
+```{r arrivals_departures}
+
+cscnwwa_departures <- df %>% 
+  filter(detention_facility_code == "CSCNWWA",
+         detention_book_out_date_time >= as.Date("2025-01-01"),
+         detention_book_out_date_time <= as.Date("2025-02-28")) %>% 
+  mutate(date = as.Date(detention_book_out_date_time),
+         type = "departures")
+
+dat_1 <- cscnwwa_departures %>% 
+  distinct(unique_identifier, .keep_all="TRUE") %>% 
+  count(date, type)
+
+cscnwwa_arrivals <- df %>% 
+  filter(detention_facility_code == "CSCNWWA",
+         book_in_date_time >= as.Date("2025-01-01"),
+         book_in_date_time <= as.Date("2025-02-28")) %>% 
+  mutate(date = as.Date(book_in_date_time), 
+         type = "arrivals")
+
+dat_2 <- cscnwwa_arrivals %>% 
+  distinct(unique_identifier, .keep_all="TRUE") %>% 
+  count(date, type)
+
+dat <- rbind(dat_1, dat_2)
+
+dat_wide_2 <- dat %>% 
+  pivot_wider(id_cols = "date", names_from="type", values_from="n") %>% 
+  arrange(date)
+
+dat_wide <- left_join(dat_wide, dat_wide_2, by = 'date')
+
+write_delim(dat_wide, here::here('analyze', 'output', 'cscnwwa_ice_vs_geo_track.csv'), na='', delim='|')
 
 ```

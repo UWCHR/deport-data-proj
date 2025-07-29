@@ -1,0 +1,209 @@
+---
+title: "Generate daily detention facility rosters"
+author: "UWCHR"
+date: "2025-07-28"
+output:
+    html_document:
+        html_preview: true
+        toc: true
+        toc_depth: 3
+        toc_float: true
+        code_folding: hide
+---
+
+
+```{r setup, message=FALSE, warning=FALSE, include=TRUE}
+
+options(scipen = 1000000)
+
+library(pacman)
+
+p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, ggVennDiagram, UpSetR)
+
+```
+
+
+```{r setup_encounters, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Encounters.xlsx"
+
+encounter_df_1 <- read_excel(here('analyze', 'input', file), sheet=1, skip=6) %>%
+  janitor::clean_names() %>%
+  mutate(event_date = as.Date(event_date))
+
+encounter_df_2 <- read_excel(here('analyze', 'input', file), sheet=2, skip=6) %>%
+  janitor::clean_names() %>%
+  mutate(event_date = as.Date(event_date))
+
+encounter_df <- rbind(encounter_df_1, encounter_df_2)
+
+rm(encounter_df_1, encounter_df_2)
+
+encounter_ids <- unique(encounter_df$unique_identifier)
+
+```
+
+
+```{r setup_detainers}
+
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Detainers.xlsx"
+
+detainer_df<- read_excel(here('analyze', 'input', file), skip=6) %>% 
+  janitor::clean_names()
+
+detainer_df<- detainer_df%>% 
+  mutate(date_diff = difftime(detainer_prepare_date, apprehension_date, units = "days"))
+
+detainer_ids <- unique(detainer_df$unique_identifier)
+
+```
+
+```{r setup_arrests, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests.xlsx"
+
+arrest_df<- read_excel(here('analyze', 'input', file), skip=6) %>% 
+  janitor::clean_names()
+
+arrest_df <- arrest_df %>% 
+  mutate(apprehension_date = as.Date(apprehension_date)) |>
+  mutate(apprehension_method = fct(apprehension_method)) |>
+  mutate(criminality = apprehension_criminality == "1 Convicted Criminal") |>
+  mutate(n_dupe = row_number(), .by = c("unique_identifier")) |>
+  filter(!is.na(unique_identifier))
+
+arrest_ids <- unique(arrest_df$unique_identifier)
+
+```
+
+```{r setup_detention, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "ice_detentions_nov23-jun25.csv.gz"
+
+detention_df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
+  mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
+         book_in_date_time = ymd_hms(book_in_date_time),
+         detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
+         stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
+         stay_book_out_date = ymd(stay_book_out_date),
+         book_in_fy = substr(quarter(book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4),
+         stay_book_in_fy = substr(quarter(stay_book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4)) %>% filter(!is.na(unique_identifier))
+
+
+detention_df <- detention_df %>% 
+  group_by(unique_identifier) %>% 
+  arrange(stay_book_in_date_time, book_in_date_time, unique_identifier) %>% 
+  ungroup()
+
+detention_ids <- unique(detention_df$unique_identifier)
+
+```
+
+```{r setup_removals, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "2025-ICLI-00019_2024-ICFO-39357_ICE_Removals_2025.xlsx"
+
+removal_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
+  janitor::clean_names() %>% filter(!is.na(unique_identifier))
+
+removal_ids <- unique(removal_df$unique_identifier)
+
+```
+
+```{r}
+
+max_date <- max(detention_df$stay_book_out_date_time, na.rm=TRUE)
+
+detention_df <- detention_df %>% 
+  mutate(detention_book_out_date_time_min = 
+           case_when(is.na(detention_book_out_date_time) ~ max_date,
+                     TRUE ~ detention_book_out_date_time),
+         id_in_encounters = unique_identifier %in% encounter_ids,
+         id_in_detainers = unique_identifier %in% detainer_ids,
+         id_in_arrests = unique_identifier %in% arrest_ids,
+         id_in_removals = unique_identifier %in% removal_ids)
+
+
+
+```
+
+```{r sample_daily_roster}
+
+facil_code <- "CSCNWWA"
+date <- as.Date("2025-01-01")
+  
+timeline_start <- as.Date("2025-01-01")
+timeline_end <- as.Date("2025-02-28")
+timeline <- seq(timeline_start, timeline_end, by='day')
+
+```
+
+```{r sample_daily_roster}
+
+generate_roster <- function(facil_code, date) {
+  
+  daily_roster <- detention_df %>% 
+    filter(detention_facility_code == facil_code,
+           book_in_date_time <= date,
+           detention_book_out_date_time_min > date)
+  
+}
+
+sample_roster <- generate_roster(facil_code, date)
+
+```
+
+```{r sample_arrivals}
+
+generate_arrivals <- function(facil_code, date) {
+  
+daily_arrivals <- detention_df %>% 
+  filter(detention_facility_code == facil_code,
+         as.Date(book_in_date_time) == date)
+
+}
+
+sample_arrivals <- generate_arrivals(facil_code, date)
+
+```
+
+```{r sample_departures}
+
+generate_departures <- function(facil_code, date) {
+
+  daily_departures <- detention_df %>% 
+    filter(detention_facility_code == facil_code,
+           as.Date(detention_book_out_date_time) == date)
+
+}
+
+sample_departures <- generate_departures(facil_code, date)
+
+```
+
+```{r write_rosters}
+
+write_rosters <- function(facil_code, date) {
+  
+  write_delim(generate_roster(facil_code, date), here::here('analyze', 'output', 'rosters', paste0(facil_code, "_", date, ".csv")), delim='|')
+  
+  write_delim(generate_arrivals(facil_code, date), here::here('analyze', 'output', 'rosters', paste0(facil_code, "_arrivals_", date, ".csv")), delim='|')
+  
+  write_delim(generate_departures(facil_code, date), here::here('analyze', 'output', 'rosters', paste0(facil_code, "_departures_", date, ".csv")), delim='|')
+  
+}
+
+write_rosters(facil_code, date)
+
+```
+
+```{r}
+
+for (date in timeline) {
+  date = as.Date(date)
+  
+  write_rosters(facil_code, date)
+                 
+}
+
+```

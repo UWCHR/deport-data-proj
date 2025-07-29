@@ -372,23 +372,28 @@ old_removals <- old_removals %>%
   mutate(month = floor_date(departed_date, "month"))
 
 new_removals <- removal_df %>% 
-  mutate(month = floor_date(departed_date, "month"))
+  mutate(month = floor_date(departed_date, "month"),
+         area_of_responsibility = docket_aor)
 
 dat1 <- old_removals %>% 
   count(month, area_of_responsibility) %>% 
-  mutate(type = "uwchr-removals")
+  mutate(source = "uwchr-removals")
   
 dat2 <- new_removals %>% 
   count(month, area_of_responsibility) %>% 
-  mutate(type = "ddp-removals")
+  mutate(source = "ddp-removals")
 
 dat <- rbind(dat1, dat2)
 
-p1 <- dat %>% 
-  group_by(month) %>% 
-  summarize(n = sum(n)) %>% 
-  ggplot(aes(x = month, y = n)) +
-  geom_col()
+dat_1 <- dat %>% 
+  group_by(month, source) %>% 
+  summarize(n = sum(n))
+
+p1 <- dat_1 %>% 
+  ggplot(aes(x = month, y = n, fill = source)) +
+  geom_col() +
+  labs(title = "Total monthly removals",
+       subtitle = "Nationwide")
 
 p1
 
@@ -398,13 +403,16 @@ p1
 
 dat1 <- old_removals %>% 
   count(month, area_of_responsibility) %>% 
-  mutate(type = "uwchr-removals")
+  mutate(source = "uwchr-removals")
   
 dat2 <- new_removals %>% 
+  mutate(area_of_responsibility = docket_aor) %>% 
   count(month, area_of_responsibility) %>% 
-  mutate(type = "ddp-removals")
+  mutate(source = "ddp-removals")
 
 dat <- rbind(dat1, dat2)
+
+write_delim(dat, here::here('analyze', 'output', 'monthly_removals_by_aor_uwchr_ddp.csv'), delim=',')
 
 p1 <- dat %>% 
   mutate(area_of_responsibility = str_replace(area_of_responsibility, " Area of Responsibility", "")) %>% 
@@ -415,6 +423,17 @@ p1 <- dat %>%
   facet_wrap(~area_of_responsibility)
 
 p1
+
+p2 <- dat %>% 
+  filter(area_of_responsibility == "Seattle Area of Responsibility") %>% 
+  group_by(month, area_of_responsibility, source) %>% 
+  summarize(n = sum(n)) %>% 
+  ggplot(aes(x = month, y = n, fill = source)) +
+  geom_col() +
+  labs(title = "Total monthly removals",
+       subtitle = "Seattle Area of Responsibility")
+
+p2
 
 ```
 
@@ -435,29 +454,31 @@ arr_removals <- arrests_with_removal %>%
 
 dat1 <- old_removals %>% 
   count(month) %>% 
-  mutate(type = "uwchr-removals")
+  mutate(source = "uwchr-removals")
   
 dat2 <- new_removals %>% 
   count(month) %>% 
-  mutate(type = "ddp-removals")
+  mutate(source = "ddp-removals")
 
 dat3 <- det_removals %>% 
   count(month) %>% 
-  mutate(type = "ddp-detentions")
+  mutate(source = "ddp-detentions-with-removal")
 
 dat4 <- arr_removals %>% 
   count(month) %>% 
-  mutate(type = "ddp-arrests")
+  mutate(source = "ddp-arrests-with-removal")
 
 dat <- rbind(dat1, dat2, dat3, dat4)
 
 p1 <- dat %>% 
   filter(month >= "2011-10-01") %>% 
-  group_by(month, type) %>% 
+  group_by(month, source) %>% 
   summarize(n = sum(n)) %>% 
-  ggplot(aes(x = month, y = n, fill = type)) +
-  geom_col(position='dodge')
+  ggplot(aes(x = month, y = n, fill = source)) +
+  geom_col(position='dodge') +
+  labs(title = "Total weekly removals, nationwide")
 
 p1
 
 ```
+

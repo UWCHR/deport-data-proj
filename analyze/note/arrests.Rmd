@@ -11,7 +11,6 @@ output:
         code_folding: hide
 ---
 
-
 ```{r setup, message=FALSE, warning=FALSE, include=TRUE}
 
 options(scipen = 1000000)
@@ -19,6 +18,14 @@ options(scipen = 1000000)
 library(pacman)
 
 p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl)
+
+general_caption <- "Data: ICE administrative arrests obtained by Deportation Data Project\nAnalysis: University of Washington Center for Human Rights"
+
+```
+
+This notebook analyzes ICE administrative arrest data obtained via FOIA by the [Deportation Data Project](https://deportationdata.org/), with a focus on ICE's Seattle Area of Responsibility.
+
+```{r load_arrests, message=FALSE, warning=FALSE, include=TRUE}
 
 file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests.xlsx"
 
@@ -33,22 +40,26 @@ arrest_df <- read_excel(here('analyze', 'input', file), skip=6) %>%
 
 ```
 
+National arrest trend.
+
 ```{r natl_trend}
 
-figure_1 <-
+dat_1 <-
   arrest_df |>
     filter(week > "2023-08-28",
          week < "2025-06-09") |>
-  count(week) |>
+  count(week)
+
+figure_1 <- dat_1 |>
   ggplot(aes(week, n)) +
 geom_vline(data = NULL, xintercept = as.Date("2025-01-20"), color = gray(0.2), linetype = "dashed") +
-  annotate("text", x = as.Date("2025-01-20") - days(7), y = 100, label = "Trump II\ninauguration", hjust = 1, size = 3.5, color = gray(0.2)) +
+  annotate("text", x = as.Date("2025-01-20") - days(7), y = max(dat_1$n)*.75, label = "Trump II\ninauguration", hjust = 1, size = 3.5, color = gray(0.2)) +
   geom_line(linewidth = 0.8) +
   scale_y_continuous(labels = scales::comma) +
   coord_cartesian(clip = "off") +
   labs(title = "Weekly arrests by Immigration and Customs Enforcement (ICE)",
        subtitle = "Nationwide",
-       x = "", y = "Number of arrests per Week", caption = "Source: ICE via FOIA request") +
+       x = "", y = "Number of arrests per Week", caption = general_caption) +
   theme_minimal() +
   theme(plot.margin = margin(5, 0, 5, 5),
         plot.title = element_text(margin = margin(0,0,10,0)),
@@ -60,16 +71,18 @@ geom_vline(data = NULL, xintercept = as.Date("2025-01-20"), color = gray(0.2), l
 
 figure_1
 
-figure_2 <-
+dat_2 <-
   arrest_df |>
   mutate(week = floor_date(apprehension_date, "week", week_start = "Monday")) |>
   filter(week > "2023-08-28",
          week < "2025-06-09") |>
   mutate(criminality = factor(criminality, levels = c(TRUE, FALSE), labels = c("Criminal conviction", "No criminal conviction"))) |>
-  count(criminality, week) |>
+  count(criminality, week)
+
+figure_2 <- dat_2 |>
   ggplot(aes(week, n, color = criminality, group = criminality)) +
   geom_vline(data = NULL, xintercept = as.Date("2025-01-20"), color = gray(0.2), linetype = "dashed") +
-  annotate("text", x = as.Date("2025-01-20") - days(7), y = 100, label = "Trump II\ninauguration", hjust = 1, size = 3.5, color = gray(0.2)) +
+  annotate("text", x = as.Date("2025-01-20") - days(7), y = max(dat_1$n)*.75, label = "Trump II\ninauguration", hjust = 1, size = 3.5, color = gray(0.2)) +
   geom_line(linewidth = 0.8) +
   scale_y_continuous(labels = scales::comma) +
   scale_color_manual(values = c("#0072B2", "#D55E00")) +
@@ -539,7 +552,8 @@ plotly::ggplotly(p1)
 
 ```
 
-```{r misc}
+
+```{r arrest_method_by_detention_status}
 
 p1 <- arrest_df %>% 
    mutate(week = floor_date(apprehension_date, "week", week_start = "Monday"),
@@ -567,3 +581,39 @@ p2
 
 ```
 
+# Apprehension AOR versus State versus Landmark
+
+Analysis of Seattle Area of Responsibility apprehensions shows that `apprehension_state` does not always coincide with geography of AOR (and vice versa). Records with missing `apprehension_state` may have `apprehension_site_landmark` values suggestive of state location. For example, majority of records with `apprehension_site_landmark` equal to "YAKIMA NON DETAINED DOCKET" are missing `apprehension_state` value, minority of these records are coded with `apprehension_state` equal to "WASHINGTON".
+
+```{r}
+
+tab1 <- arrest_df %>% 
+  filter(apprehension_aor == "Seattle Area of Responsibility") %>% 
+  count(apprehension_aor, apprehension_state)
+
+tab2 <- arrest_df %>% 
+  filter(apprehension_state == "WASHINGTON") %>% 
+  count(apprehension_state, apprehension_aor)
+
+tab3 <- arrest_df %>% 
+  filter(apprehension_aor == "Seattle Area of Responsibility",
+         is.na(apprehension_state)) %>% 
+  count(apprehension_site_landmark)
+
+tab4 <- arrest_df %>% 
+  filter(apprehension_site_landmark == "YAKIMA NON DETAINED DOCKET",
+         ) %>% 
+  count(apprehension_aor, apprehension_state)
+
+dat <- arrest_df %>% 
+  filter(apprehension_aor == "Seattle Area of Responsibility") %>% 
+  mutate(week = floor_date(apprehension_date, "week", week_start = "Monday")) %>% 
+  count(week, apprehension_state)
+
+p1 <- dat %>% 
+  ggplot(aes(x = week, y = n, color = apprehension_state)) +
+  geom_line()
+
+p1
+  
+```
