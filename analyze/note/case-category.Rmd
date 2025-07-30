@@ -301,13 +301,28 @@ plotly::ggplotly(p1)
 ```{r dat_sea_basic}
 
 dat_sea <- removals_df %>% 
-  filter(docket_aor == "Seattle Area of Responsibility") %>% 
+  filter(docket_aor == "Seattle Area of Responsibility",
+         departed_date >= "2025-01-01") %>% 
+  count(case_category) %>% 
+  mutate(case_category_group = case_when(str_detect(case_category, paste0(pending, collapse="|")) ~ "pending case",
+                                         str_detect(case_category, paste0(benefit, collapse="|")) ~ "benefit blocking deport",
+                                         str_detect(case_category, paste0(expedited_admin_rein, collapse="|")) ~ "lack of due process",
+                                         TRUE ~ "all other categories"
+                                         ),
+           pct_total = n/sum(n)) %>% 
+  group_by(case_category_group) %>% 
+  mutate(pct_group = n/sum(n))
+
+dat_sea_group <- removals_df %>% 
+  filter(docket_aor == "Seattle Area of Responsibility",
+         departed_date >= "2025-01-01") %>% 
   mutate(case_category_group = case_when(str_detect(case_category, paste0(pending, collapse="|")) ~ "pending case",
                                          str_detect(case_category, paste0(benefit, collapse="|")) ~ "benefit blocking deport",
                                          str_detect(case_category, paste0(expedited_admin_rein, collapse="|")) ~ "lack of due process",
                                          TRUE ~ "all other categories"
                                          )) %>% 
-  count(case_category_group)
+  count(case_category_group) %>% 
+  mutate(pct_group = n/sum(n))
 
 ```
 

@@ -361,6 +361,37 @@ tab_sea_cit_dep <- removal_df %>%
 
 ```
 
+```{r venezuelans_to_el_salvador}
+
+arr_ven_es <- arrest_df %>% 
+  filter(!is.na(departed_date),
+         !is.na(unique_identifier),
+         citizenship_country == 'VENEZUELA',
+         departure_country == 'EL SALVADOR')
+
+det_ven_es <- detention_df %>% 
+  filter(!is.na(departed_date),
+         !is.na(unique_identifier),
+         citizenship_country == 'VENEZUELA',
+         departure_country == 'EL SALVADOR')
+
+rem_ven_es <- removal_df %>% 
+  filter(!is.na(departed_date),
+         !is.na(unique_identifier),
+         citizenship_country == 'VENEZUELA',
+         departure_country == 'EL SALVADOR')
+
+ven_es_ids <- union(union(arr_ven_es$unique_identifier, det_ven_es$unique_identifier), rem_ven_es$unique_identifier)
+
+venezuelan_removals_el_salvador <- removal_df %>% 
+  filter(unique_identifier %in% ven_es_ids)
+
+write_delim(arr_ven_es, here::here('analyze', 'output', 'arr_ven_es.csv'), delim='|')
+write_delim(det_ven_es, here::here('analyze', 'output', 'det_ven_es.csv'), delim='|')
+write_delim(rem_ven_es, here::here('analyze', 'output', 'rem_ven_es.csv'), delim='|')
+
+```
+
 ## Comparing various datasets/subsets for removal trends over time
 
 ```{r historic_removals}
