@@ -255,3 +255,24 @@ temp <- rbind(gitmo_1, gitmo_2, gitmo_3, gitmo_4, gitmo_5)
 write_delim(temp, here::here('analyze', 'output', 'draft_enforcement_history.csv'), delim=',', na="")
 
 ```
+
+```{r lookup_bio}
+
+
+
+```
+
+```{r}
+
+cecot_1 <- lookup_enforcement("a58058e5074ce32587c485e5aebabd08087d75af")
+cecot_2 <- lookup_enforcement("b21ab06c15751a4a13a8ce8a680015bf60442b06")
+cecot_3 <- lookup_enforcement("632599f913e5479629111c387f23392d13fbe0d6")
+cecot_4 <- lookup_enforcement("cdde407ea67258920360f12d78b5c6e6c5335421")
+cecot_5 <- lookup_enforcement("bce92d889ca807e8789d54e2785cde197f02cc43")
+cecot_6 <- lookup_enforcement("129045ad3aa54bc7a1d75f0eb10fbe46c8655ce1")
+
+temp <- rbind(cecot_1, cecot_2, cecot_3, cecot_4, cecot_5, cecot_6)
+
+write_delim(temp, here::here('analyze', 'output', 'cecot_enforcement_histories.csv'), delim=',', na="")
+
+```
