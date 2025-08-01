@@ -1,0 +1,655 @@
+---
+title: "Comparison of NWDC rosters across Jun/July DDP releases"
+author: "UWCHR"
+date: "2025-07-30"
+output:
+    html_document:
+        html_preview: true
+        toc: true
+        toc_depth: 3
+        toc_float: true
+        code_folding: hide
+---
+
+
+```{r setup, message=FALSE, warning=FALSE, include=TRUE}
+
+options(scipen = 1000000)
+
+library(pacman)
+
+p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, ggVennDiagram, UpSetR, digest)
+
+```
+
+
+```{r setup_encounters, message=FALSE, warning=FALSE, include=TRUE}
+
+# file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Encounters.xlsx"
+# 
+# encounter_df_1 <- read_excel(here('analyze', 'input', file), sheet=1, skip=6) %>%
+#   janitor::clean_names() %>%
+#   mutate(event_date = as.Date(event_date))
+# 
+# encounter_df_2 <- read_excel(here('analyze', 'input', file), sheet=2, skip=6) %>%
+#   janitor::clean_names() %>%
+#   mutate(event_date = as.Date(event_date))
+# 
+# encounter_df <- rbind(encounter_df_1, encounter_df_2)
+# 
+# rm(encounter_df_1, encounter_df_2)
+# 
+# encounter_ids <- unique(encounter_df$unique_identifier)
+
+```
+
+
+```{r setup_detainers}
+
+# file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Detainers.xlsx"
+# 
+# detainer_df<- read_excel(here('analyze', 'input', file), skip=6) %>% 
+#   janitor::clean_names()
+# 
+# detainer_df<- detainer_df%>% 
+#   mutate(date_diff = difftime(detainer_prepare_date, apprehension_date, units = "days"))
+# 
+# detainer_ids <- unique(detainer_df$unique_identifier)
+
+```
+
+```{r setup_arrests, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests.xlsx"
+
+arrest_df<- read_excel(here('analyze', 'input', file), skip=6) %>%
+  janitor::clean_names()
+
+arrest_df <- arrest_df %>%
+  mutate(apprehension_date = as.Date(apprehension_date)) |>
+  mutate(apprehension_method = fct(apprehension_method)) |>
+  mutate(criminality = apprehension_criminality == "1 Convicted Criminal") |>
+  mutate(n_dupe = row_number(), .by = c("unique_identifier")) |>
+  filter(!is.na(unique_identifier))
+
+arrest_ids <- unique(arrest_df$unique_identifier)
+
+```
+
+```{r setup_detention, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "ice_detentions_nov23-jun25.csv.gz"
+
+detention_df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
+  mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
+         book_in_date_time = ymd_hms(book_in_date_time),
+         detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
+         stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
+         stay_book_out_date = ymd(stay_book_out_date),
+         book_in_fy = substr(quarter(book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4),
+         stay_book_in_fy = substr(quarter(stay_book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4)) %>% filter(!is.na(unique_identifier))
+
+
+detention_df <- detention_df %>% 
+  group_by(unique_identifier) %>% 
+  arrange(stay_book_in_date_time, book_in_date_time, unique_identifier) %>% 
+  ungroup()
+
+detention_ids <- unique(detention_df$unique_identifier)
+
+```
+
+```{r setup_detention_jun}
+
+file <- "2025-ICLI-00019_2024-ICFO-39357_ICE_Detentions_LESA-STU_FINAL_unprotected.xlsx"
+
+df1 <- read_excel(here::here('import', 'input', '2025-06', file), sheet=1, skip=6) %>%
+	janitor::clean_names() %>% 
+	mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
+	         book_in_date_time = ymd_hms(book_in_date_time),
+	         detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
+	         stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
+	         stay_book_out_date = ymd(stay_book_out_date))
+	
+df2 <- read_excel(here::here('import', 'input', '2025-06', file), sheet=2, skip=6) %>%
+	janitor::clean_names() %>% 
+	mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
+	         book_in_date_time = ymd_hms(book_in_date_time),
+	         detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
+	         stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
+	         stay_book_out_date = ymd(stay_book_out_date))
+
+names_1 <- names(df1)
+names_2 <- names(df2)
+
+stopifnot(names_1 == names_2)
+
+jun_detention_df <- rbind(df1, df2)
+
+```
+
+```{r setup_removals, message=FALSE, warning=FALSE, include=TRUE}
+
+# file <- "2025-ICLI-00019_2024-ICFO-39357_ICE_Removals_2025.xlsx"
+# 
+# removal_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
+#   janitor::clean_names() %>% filter(!is.na(unique_identifier))
+# 
+# removal_ids <- unique(removal_df$unique_identifier)
+
+```
+
+```{r}
+
+geo_track_jun_ids <- c('0111f2cf947127b547227cd94361a4492e945f2c',
+'01132aae3258d18b0c0328300dfe7e67ff2a9638',
+'013628a39e392dac4ef3978d77cac9176cb6d87a',
+'01d8ffe38556eae41454b4cb80b2c9efb1f80375',
+'02975a698d702968d8819f79f6ee5ca054c34b8f',
+'02c35866d2caee8240c5b074e16f799ce8f319d2',
+'02dfc8b8249c1694f03a7a355d0b8491c86707a8',
+'033c6da57fcc897a0920b4ba9d407dacfa496b27',
+'0404ffd5d2486c8002fdc3dfae82d0296ca9cda0',
+'045cf019f2cc3ecdb9b080aa52e0689c65585ce9',
+'04c69f7060ca263390d27849cd7827ac12aeadd1',
+'05048dcd9c3136b8290006fc19ebc4d6a58fdd67',
+'05ebaf3caddcc41c4a92d0e90f20fd9b7c15540a',
+'06c41bf15aa80531d3c609e589c088afe91ea5b3',
+'07159518fb52eb60a1efa4d306fba5326ceb972b',
+'095edabd144ae17d5d558ed605c62d6b89d2821a',
+'099c3422efc2b2708cd5bb9b6d53bd12035a098b',
+'0a37fa3802342efbee95dca8fbfcf3c9461da8f1',
+'0ad0959414ca413e62e715491ca5c4396ac4348b',
+'0b368bde9ffa50b911290f52ae87624a04d001fb',
+'0dd84bf7c8f3c4ff98d18145334661dcb303544d',
+'112ded8cafac1d8924f805404d63018a29dcb9e4',
+'127254b40d7f731614874bec88f14073097c6f1a',
+'129e8176c7f885c4fc913eab1bf47832db0e2088',
+'12b6c933adffb5671ab4bba37a7dcba14c63a311',
+'12e7fda99a45981fa1859aba5115251930129e7f',
+'137aac0ab73efaad70baca93cebf1a3a9fb6e46f',
+'13dd2e1aebd19eaff0561278a843d6f423ae6d15',
+'145c2c1055930a120db4156b735519dd5560e328',
+'15ce358f05bb18a53f36d83fdb0726ea6728bc12',
+'1629a05a6d29ad712da2da4f50231b25ab6c0f0d',
+'16ec67cc9320c7044dcb39d7fe1d825787d72c8e',
+'17223498e4e05f5a9f9ae1b112258d01969f2936',
+'175ce442317d2fe752868d4add27985c71e3cc7e',
+'17814265194e452e4486a61aeb701e90ce245670',
+'17814265194e452e4486a61aeb701e90ce245670',
+'1893b30472ff3a566d5d8eef52f3b3e659854e0a',
+'190aae96c9b178050b7e68827cbc70337bcc6981',
+'19e6a732efb68fce48229468e705aefe16a70404',
+'1a2d03c806e86e2ddea59b7a1adb5664b060b27e',
+'1b4812a65bc006759c5f6a2368d08df8ac9c3e62',
+'1b69b8399a4ccb8bc5d5f45908c2897ec4c7f7bb',
+'1b86ae60df378124c9aef1eccec4c94d3c9c48c3',
+'1c1710c6148e64d47e04d73490d9384dcdf7db15',
+'1c89b8d02b634b7415abae8b143aafd4e9328105',
+'1cb93e532414e13203f22b84859cd6dd0b3f3387',
+'1cf94e4f970c95613011a727d0b8c3f43f400a26',
+'1cfefaf3e7ad60103ba767f2cb93f395d83f15ae',
+'1d001ef8992f7394741121a75e61e1a17d51f49e',
+'1d6d88c11d5366637251e715a3a495eb2dedf5cc',
+'1dcfaa5be81d8fd923b6505ddc6825d55c7735d8',
+'1ef2c0d2d542d4d5a5f52ade19def0d4283c869b',
+'1eff38ccef768bc6f46e33e7eb2c4d0362b3d62c',
+'1f0d663a54f8060ca10a0e8a70cadae4a935fbfd',
+'215c922225ab66bdaff6c36ba8dfee98450bf5a2',
+'215c922225ab66bdaff6c36ba8dfee98450bf5a2',
+'21656796c09e7d1872a7940ef2eadbfed78484b7',
+'237636f1336bf7f3a39d01937934c7b1605ccfa8',
+'243611ef1d6c4b3baacd2a1af5fff3459d1e88e7',
+'248e86993bbef6824ad535576ea6ca35d750a7ee',
+'24f5b63a1aa9c7f25d02e971ed2554c8eb72f3f8',
+'252566e41ac86e4892f49840e0a0cc41ab6bf52b',
+'2618cc9f76770053254e71d61f92484cac3fe170',
+'26922e9a1fd21452b5f3c4d59c9fc06a81df35d1',
+'26d44aad873b56fe0cb6dee4bacbb0f14e94b22d',
+'2707aa6db000712fb0381adfc6a1af99f32e8dc9',
+'27ad6d68ce3c98599e1d755b36f576d77484262d',
+'287376d4c490021d249790ed62057751995d6d43',
+'28f274e6a38073d783b2e25c9d2cb766d86ae560',
+'29799cfa5d94914f48ee85bddcf8e7387a690d3c',
+'2a02d19d50972876c3ad46e86bed03d344fb5ff0',
+'2a278c4488f4ae9f3e5ca479862fa6a5d71177eb',
+'2aaee5c652ca268728edcc877e4c25322b83d084',
+'2bcacb45b3683542dc1e769f0156f389b6dd080f',
+'2d3107327c541af36b08ead95a6db8d0530892b5',
+'2d674013728160a94ce1815f1a532aee427860c0',
+'2d8221feda44e1ffa84df7c7f0a92bb1819d483f',
+'2dcde21a3cdfbcb2acbcde6358793cfe90c2cb16',
+'2f0f8e66d8618695078d46cb573261413883aaf1',
+'31f77864b1f33a5e8606d058aa531cc4d5f4884b',
+'332368afb3a66ec7c11f6bd6e60c7c592d2ebc72',
+'335730d458a3edd1886027e31a50ac8ff8d14be9',
+'33dfcb0f829dca8348f8daaf7cb90ec33cafc722',
+'33e3811b6b343aaeb121743bb5f48981e39cb1a7',
+'3494160705080bc8a1a847b32d1fec6c8f0db50a',
+'351bf98ba6bee60108e9f2bcba49cf5504959f78',
+'35e1374797fef9b8cf2a44f4435547c8ee647969',
+'35f308ae508076f74321a1e5a64abacbf4292d6d',
+'35f9bfe75f3075153ef6be01760578f392fb19ce',
+'35f9bfe75f3075153ef6be01760578f392fb19ce',
+'360a9ec8cb247e45feaa80c08826e98625d688fa',
+'362188f3376c4fad15e2ece4c8808b6232e53234',
+'3698e18909dcd1fa05f41bca5121fa3b7c5ac665',
+'374d81b6aac12bb01c7164b539fc0d16909d5074',
+'378df73704e2bc0b493f04c362d106677667394d',
+'3a429240fcbd2de758da801d3199cfe10fe16c7f',
+'3a51bbec2ba3e302e995303023ff8373ed84f6d2',
+'3a54b3826a5da7b9ec7924a03fc0a7165c39844f',
+'3a8d4d8ba1b3ee714d039de954e2bfcbfab77c37',
+'3b229978ab123989b8d3cd7cca763faa34b3828a',
+'3bf61e3d911cb83885ac30348d44517f77c75c9f',
+'3c2cacd784ae3276ca8ab89e810acd7691b2e437',
+'3ce3d62cf16f233ec6b999d2a78555c1dfdab5cd',
+'3d0fad473d147d768a4e1b9b966711a38fecd40c',
+'3daaa8453015c050396d7ddd34a09783978ee211',
+'3ead23b1f0013ade940f819b68e229e80d07bdee',
+'3f4c3229657f42fbdcfa8c965572ab38ce591508',
+'3fb0434378149c4fdd6406c8157c34e13ea3666c',
+'3fd83c058006f3ffc95735bea82f9efc01cce4b0',
+'40120fa72c532984eb779053a81b93750a89273d',
+'408fefb9c72a0e99d70079b4f1212381a5fc00f3',
+'408fefb9c72a0e99d70079b4f1212381a5fc00f3',
+'40be13bc94b64f1df69c75d75d16c79d3ac875c1',
+'411c35adb8b606788ba78ff4f473c4def9be4597',
+'41599ab1031cf29eaafe80ebf8294e81a42d623e',
+'420754025273faf217acbe7770063866001de448',
+'421c55e25744c260733dc695fa53ccb435507b3e',
+'422a146d4067988453f001a62afa912e125cc94c',
+'42782378d7413ab9b31e8aad64ea2736fb294c78',
+'441ab44a362a769be8fa3b481ca29c0b39d46bbd',
+'45cc6d46e341993bc0f11b0d015336516e903864',
+'465ccda0f4ef5e90abc6ee0bf86579ead1507ba6',
+'481b6abc23c0d9ae7678ec250003064b7e17239e',
+'488d9df2c30f4080040f03e9698a49a4c169d034',
+'499ac992186e718591de51aaa234ff1d88827b69',
+'49bb1b62fcb6e66f89711d86fa6e663c7b5479ec',
+'49c6d81413ca67863e43a6167813fc70c5bae7e0',
+'4c8e83abb79db080e3638a3b07203c852d72b66a',
+'4d4929932e23a09b833c56292c12a7ae7862c3bd',
+'4d57302ae4b99d6ea3c84745d81d6c9f86263d4d',
+'4da93d5aa88a4359496ebfa3576875296a66a10e',
+'4ea4a121a7968c26f4ce0ac192e18c773778cc46',
+'5003896ba44fbb0341d6f255844ccf0fe2b67472',
+'51ad92ca8cf2a17ab3ad94fece164e42bb7333a3',
+'52275603ecaa57e2976f70cb92d70260200bc44a',
+'52d202eeaf617ec892c757da21ac79b9f4c730b5',
+'5381cbdc4b0bf3b2dc59e1b4dcab8661ac7696ba',
+'53f9ab91964f6c16039c74450b77d5f136c27958',
+'53fe42e2de133c906e5f62fbe71a7aace2e3ec40',
+'54cdbbdc366ad05bdae9ce96fe2d9060a3c64c42',
+'54d9ad10efa261ef16b28763b86b93021887a0be',
+'550ffdae56ffacee77a94f5353e685b89f651763',
+'550ffdae56ffacee77a94f5353e685b89f651763',
+'551fd9cf73fe034026e9e46ac2cd1dc207614b61',
+'553382e587d6e9d3644dd8f2eae04cf7157c5643',
+'5544534df12800bcbfc08e6eda82c48c594347c8',
+'55939b6b4bab38c6490f700be80401295b7fb0cc',
+'55939b6b4bab38c6490f700be80401295b7fb0cc',
+'55ae9af96858a51036f4e0f269944d0329d14c2b',
+'569d3ee8c601d785399729c97796f3063cff8840',
+'56a671d749fc411a3a101a1ac16bd0a3dab8227d',
+'56ccfcad3d21246dac558fa116d5fe9e0a7f7443',
+'57c3f1eb0431b68083d7b17e035796dfced5593c',
+'5830acd60a84616027cad49d446c563372365837',
+'5a073420e81541e68a9ebbbb615ea1f2e84c963f',
+'5a312530d759f1e3bda71f553847cfaa4333a226',
+'5b8d4887c5c351fdca125d0bd281fc302a77efb9',
+'5d0d25b753610cf152eed50c22e5f2e478ac3315',
+'5d847e51106f12974b0b2453f07af708e86f9fc5',
+'5ec5d47ae44abe9d4939c2f9d2996a0a00208e5d',
+'5ef04f1089515a3d40094248dfcc44d5c8da1957',
+'5f6210a5bb7d1368740d8acf633b3a67a069c198',
+'5f6aac8655d6c9090f1b2acf40384ba8e4fa7021',
+'5fca131a239fd957b6502c89e82b3a4e6abac9da',
+'61032fb4875927f8a1a0157cfc46d155f2a29577',
+'611333b91252e91ae5804f626d694326bbd8b92f',
+'62114816f1737bd4a151901cd08cabf371c813b2',
+'6287a60da69666140441f656c28a2b4699c96444',
+'62a7c632aba67676e993653c81a81b61f67ffccd',
+'62b254bd23e8ac8c7e9ab05509cc2ce5be5419bc',
+'62d7a10d3fd42f42396fd050573a192bceb42c14',
+'62f76e5862d24d99f31c9bcccc0f7c3e9d50ca65',
+'62f76e5862d24d99f31c9bcccc0f7c3e9d50ca65',
+'636bc3cbea444bc789c37143105f38e1b185f8e4',
+'639957cfcf361679bb4aa7b4e8bc8a6045c96d59',
+'64689c4efc82e9221b6a00ddb8590dfd84db8e76',
+'646ffbece02386340377be21a79659a7eee9bccc',
+'64c3e24c59d5b2ddbe1f7d750ddb43896f08d89c',
+'65351e9c3b9c6b4524236960790193cc06a9d1fa',
+'65351e9c3b9c6b4524236960790193cc06a9d1fa',
+'65b221148b6fdaf1cbb36abdece8d77759459e82',
+'66272eddea10cf93b33a75f6e54d5378d403747c',
+'66860ef8149701c6a5d5fd3e6890a7ff90e04528',
+'67b22494fa5dfced1c3794899c93ea0d81182a89',
+'6812ed7dc19ab8fddc9c018ac7311677bb310d37',
+'68134fcab23cb411b5e193bc5d4fc062399c4a5a',
+'685780c0ad273ac113436030510a47d0532121b7',
+'68bd48391afceac3cc88acaa9647cff7635a7307',
+'68d094cfa8cd3c6e9a23b14018a315f8350cf36d',
+'69547e09eda339bb6d3caaa7d65d4740adc9d95e',
+'697d1462e57dfcbc6ab959b62477079c369f3ae0',
+'6a71e2d5ae46d623b05b5def6a1661800c1e1b73',
+'6b7e47bd162147de61e329b7fde00fa8e7657757',
+'6ba1cc2d423843e1d5f5c0ecf21f98ff14adecea',
+'6bb1419e94734825cf1bfe85686e11bedd0acf94',
+'6ca7fc2dfb667b06497416ba0bdc0e5043ca3b63',
+'6d23648b3cc93c06d70461e4c76bc0243c7eb729',
+'6d9526ec8d2356f06c8ea6ebf7de09f567aa16ff',
+'6e66bb48907477fc2df0cba6ce1299e8cefe56fe',
+'6e68ef4e1dcf1311c36599bdc5f6231b386fdba8',
+'6f4bfd0aa7525bc0d671d49ccc3330e5451a0b2f',
+'70348c2f6544a2dfeea0dd570003c96db5e6ccb4',
+'723f37e40128b15eef7182fcd2ee65a4986b88e7',
+'73064e7e78ab2d17387f574c2a57dd0a90b5a4d3',
+'7364bf3640e93126bdcfbba33c19b36f303d28e6',
+'736e5a333fbb8f44392bb4c9513cbd60bdfcc366',
+'738af7f78e9b513a1efa6ea84ac4361504de8a43',
+'739fddaf4cb70b4760fb25ce430bd43efc166082',
+'73a8e5133d82bc7ca4a2983b3ceb0301d213c41d',
+'748bb889af6dbcaa78d93bfb71ec7e06d10dbd31',
+'74a1cfae072f40b3143b9996aeb1554f15bbb14b',
+'74d51856a4dc5de537935567dbbf43d80ab8739f',
+'75ca86a13d8ab9b2e7b23b27df31e17c06d7dde7',
+'77193c274e2ca7deac9b3c1274b2c9287d7cc4d4',
+'778f23d62978db20e4996c0a85867459882b0d45',
+'77b77df62e4df72099879c70a0a1c5b43519d9e2',
+'7826fc06422a90094fbee1d3664f1de907d55ce2',
+'78d33dc9ebfeffc0e2b2c17397f193034a15e55c',
+'78dcc6dc3704db177ca8e7c13fba04856b280766',
+'793ec35b09bf08e6f251e39b5a7697413ad27029',
+'79ef3745ad34fc79a936ca691ba287f88e76a056',
+'7a555671b5f9790d53950adc3d7f7e728bccd5d1',
+'7b1fb3da61ee5316a3d3eedb783fa4fac6195c31',
+'7b2ae20f326c38d34982bc1d880ef3dcd30294c9',
+'7b7ab6f77ffe84ea588be9c9ee0f26aaa06f49ad',
+'7d970a145d1409e43d80551d971b4ca0e0a4cb41',
+'7f467807e17b296d8f498d03fc3a5fb48ad2440d',
+'803efbd0e1088aad4d01c3044ad0d57ff3c59a33',
+'80e6d45a8a1c38b3d7893c134526e715d7db63bc',
+'81f189ea30778325c6f53be537a44f34efbc8519',
+'8305b87d30ff479d38dfd68d83c30a391bd0328b',
+'849526e6c5c862fc51c20311bd52e456626596a6',
+'852b1f9d7b602a5f6467cbc5de5ab36956396f5b',
+'867de60482770f216ff7da79a50a0282f35cb7e5',
+'8697f9f24f11edd8cea6914df298180ac7194bee',
+'8779cd78cdd99af5d036b04f05f82e3aec940e42',
+'88bda790030fa297c68a7ca1937dd6505a5806d0',
+'8a9dc4154a405984a7756703c72f097794b79a29',
+'8bfce224e8fd4ec7b7e4e02313947752fffc0927',
+'8bffec9dce3fc6593b0c078b7e5e61d8c77e2cc1',
+'8de5f2dc540e91aa4e3d1fede60f2df48c4ba3df',
+'8e12ca48cb36edf7dd6d2ee999fcabf476c00756',
+'8e5e88fc624b7da55bbbbf0566d80d83b1a8e1fb',
+'8e7d412d6c39c12ac27e40bef6c579238c616b68',
+'8e9b4d8933fee3586e43de8d74fff8cf404b22ba',
+'8ea17a206e7a7e311b5e4e85aeb2fcb6aba1f36d',
+'8f850b214b8dcbc0c973dcfb46d4e7e4ab7586b7',
+'90322c2bdf968a36459a81c7c64f1f1c013f4daf',
+'906b9d30eeafaea5966f24e7c259105264810d81',
+'90750d0be433e1d02368d3a46895e52ef1d8edab',
+'90d2e758154eae8bda9158f7a1b76bc50c63dea5',
+'9187fcdd0e963123c9b5f5fb684c3072fcab955d',
+'9189d97af8527613f9540dad16f7ee070f56bf7e',
+'92a11b2ddec791cf48cec113b9e284008d8476d0',
+'9458214667d27a9a271a51097c52237734b708a9',
+'96a4363a8592b8b598e1514f39730832c7f220aa',
+'974e56d45bddc1021ca8110d0df17baa8712992c',
+'9780cd4ae01d35a4068e71e0eaeb1816a80ce9ae',
+'9810f9e36ce4616f35564e9e9a55170cfd03c5a9',
+'98257ee338c18c37c8ab4890f8f24e23702c1040',
+'99789d7223e9c5c67184105f0200afdfc3cf6faa',
+'9a1f5b98fd216d4f1bfdf81a6d22d4c2c4a200ec',
+'9b4f72711ac19bf3b987194856875ef93c4ff1fb',
+'9bb38ed49f133d0c8666791989ea5ced39839d42',
+'9d62d04f83d3c7a32b8aaecce7333bac33f185c5',
+'9da7ab3ec77b63572ce9e2c0bd9d223b64af30bd',
+'9dffd365a2e3df25901562fdb5accae0758985b2',
+'9eac2c700b1718f428be73ac3cfd793b8cba52d7',
+'9f40c1690deea2ee5b11c328034a9477fdd3998b',
+'9f786b95b2269fc747b4496114c77addf18ab1f5',
+'a0002cd5bf047a10556ecda05d77cc7b400b5f22',
+'a044a40173cb213056e7dea8cc7a46b98467d31f',
+'a0a86ac3af92ff8282f1b825efc9a75491288a67',
+'a0a86ac3af92ff8282f1b825efc9a75491288a67',
+'a2c2fd232397d8495f184877616e43253880e135',
+'a35ac17c80a5021427363371abc66a0cf0788003',
+'a3bde6b57ced4097319fc8296f9c7b5a7d07806e',
+'a674f3096d17207039bdc6ac9a5276b5426a0fdd',
+'a6c61eebedd95a393a474c1afa71a6a27c2ab3fe',
+'a8706fa3fbeb013b515e9b59e6f27bab966b0f4f',
+'a92f41e0b23d6d526b2bdcaf6d35aa29d318c123',
+'a93c9d3eefce3282e2c254f842332ec343c1af94',
+'ab43de1fad9c7e5f53c35a93d18447cec143674a',
+'ab76335fa99202c323cbd0fa39b4ecf4d39c4276',
+'ad4c5a31b334bc655311e55c088ea9d2b92a3ff3',
+'adbbc3cf33a1bc8bff96f6df13458b904b1a3d56',
+'af05fdf81ae2c41c3d87b636672ae75653fcd216',
+'af3752c4ad9012d8a34b8b09bed26e77f53a6175',
+'af79827f465ead8455b8489e7632215de5b63cbc',
+'b1c27765802a42f28ad2094ccf5605c0160c1320',
+'b2acdb7da87c1e9cf5cbb57521ee77e8c393cfa8',
+'b5a2c15f12170dd5321a8b533b087840dad7806d',
+'b5aee7bed3bb9818eb6b48c5f437fa045938c5b0',
+'b5faa76dbf42c37a047c184be4ae778e1934da38',
+'b5ff33823a1405d5983ee6f363281eb9cc9d81a8',
+'b600514a4aef8c96f44e1843797242b0e97031f3',
+'b6b335057f4946cefdc7141e96db0f4f885414cd',
+'b7505af1e045d2e978d1c1e16eae7e87c310fbc4',
+'b763411eff3fdacad8490c6bbff3e939bb2547aa',
+'b8e2b5ad487efdb1cf5cec0d99c48b3b20a8c654',
+'b9e2ba48f1a97ef57e25d57a68232c6be3af984d',
+'b9ed859e02c0a2f3283b68df1ade377f5eea2192',
+'bac4ba940cad670880dfd84c9e53e568e77221a2',
+'bb1d220badb19a48b7932e2fd18425bcd3c8fcab',
+'bc95e1242794d589282e0d16b7dfc0ffef34cdf9',
+'bcab40557966208e1e029408fbd3f50f4c473f2e',
+'bdbedc172b7ed3edc438f05a21682ed611dc74a5',
+'be015d9de031c5601e26acb3565dd85c05617982',
+'bf6196533e48f9665102f808106fe6c80ea67d0a',
+'bf8d5721b549cdba61ddafb568719447a1854c52',
+'bf98c6e6b7070cf97b28624159a687d7b7b5b1fc',
+'c0217d083346d9f5c2768bbcfd1f63e4f0df3676',
+'c03d87985b7a67964d6b675a2ebb803171ec0f5c',
+'c059304c952f91b10734b37c0c018d15feec45f1',
+'c07cb9bd7c2525f71b9fb8c7eae491d91dce14ce',
+'c0d6aaac455b3d527f019afd10c2bb238e160f39',
+'c1ff6f72a35c53a4b73e19e4d33f15e8b83ae184',
+'c2a91001b851a8eb1b4e4374477f3dadc0a5630c',
+'c391407eeec80ccfb15f612a08949ffa3635bc01',
+'c684180a80d4ceb3461f64c8d3fb62344b35a68f',
+'c6ed265f324320c662245d8ec5b1c9eaacca9ff7',
+'c76d053becb6da7972c399c899a6bfb0abe379d7',
+'c7bf00f55c018f4acb32df463fc632d571f9daea',
+'c7fb6338bea53dc455d8a35d7b4cc3e843038332',
+'c8bbf4bd5b4442aba155da821e79f25f040d7cac',
+'ca94a0fc11e5b881bc05677dc9e542c2a69498ba',
+'cba383f77f78f753d63a57b3f0fa7ad1d1df6543',
+'cc4c5ef1635b56455d06d99b486df615d4e49a5a',
+'cd206192a2ce65b4fcbca4f6e17f311f990531b6',
+'ce10c36981b52873bc9bb984cedddfa43dfc270e',
+'ce77bb7ca7beb6a6cc6a652058e528463a926287',
+'ce8dc18af52c47df48b4383cdf9a31ca37a4404c',
+'ce9d74b352be34111ec54a9052ede8660320d010',
+'cf0852ac047c636d42ca0344a96c211b27c2e8cf',
+'cf45cb1fd21e3cd18ebc1d5c40fcf8fcce627fcc',
+'cf70276a35c1b90a8fcbad62e4959ba14d7282ce',
+'d00a15d764cef0e6f3f70780c030bfc67486f643',
+'d0608c837436cdea6b4405d28c756018bc442d83',
+'d3073af06c5637d3656decc01d79c1e967416759',
+'d38c9d43b2a0146b7c11cd6c5cc45c1b20e14586',
+'d6cad130a46b90e60eca52bc5823bdff02471615',
+'d6f1c362ff4f64679f7de76833582c5c0eaea3a2',
+'d716e743c9e819eaf18c9758d4a908515d2b7780',
+'d791dc7ae82c46351cd1edc1598093d98abfe4ed',
+'d79e7c5f4b281d213e608440bc2a7266555922a9',
+'d89c09bc3d7bd54a4fcb6f78e4e817dda956602d',
+'d955ed5aa519edec19ce333f3cf700ba27b6b20c',
+'da07fcf399cdb27b85813bdbbadde13c84561821',
+'dabd2b11703e00f0c5304b7c48667815554ffe97',
+'dbe1e5bb66aa4891e2a3162a59592b1891963aa1',
+'dc8b2bfae864fcfb68cb75d300d73eb0e90f3d88',
+'dcf1d8a79105c97797d9d40888a9e47cc8cb79fe',
+'dd274e6bd4eaf19b0e29ff9d5c5d8615d2b13e98',
+'dd796cab7a3ae678f0d13aa7fc1b13b2ed207e85',
+'deadfa8ae21713bc69d9f1524c29e4e1c75b8a35',
+'df3f7372a431ca72323182c68fe513f6006a010c',
+'dfb3dde6d8da12bafc1b0698b07f363b93334362',
+'dffb920704d7855e1ba3e4a71504ca9bb94dd034',
+'e0136a05b5e84c68979b8d1543dbcd4e01de233f',
+'e086f95ebd4c4ba693946d14ac7afbad59abcf57',
+'e30f789e667936368f4af197d0f98a9dd1251007',
+'e5716035ffbe1ae80af495ceb8e4efd2601c82e8',
+'e64b239cf5343ba97fcacc875c96afda37350438',
+'e6cab7401682e6afbc1cdb483f831f2fb11f3f8a',
+'e7b7cd62448b5a09bd8a71c95d35055baae723b0',
+'e8eeade709d7c53e70cb4c497ca4c1dad8f0693a',
+'e91103d058b23a292a41d19c8e3e2df5926da125',
+'e98122a6c9ef4f51cb0069b4d70939cd6939eabf',
+'e9f3e9b0b9d331f3159bee102e7644c0069d5876',
+'e9f866ba4cc1887a7a54c548383b1e43b4d53c63',
+'e9fa0986c263efe33ce375782384e6a58857f85a',
+'ea3511667a5a69d6213dae8ae472b916c76be8d1',
+'eb06bae8b78b42eb6c189139bf0cd7783494c90e',
+'ec5fca37ffd79dfb1bf3da5262575b961c5f7e85',
+'eca94f5628224d062be0db4e5d3deb522f89e3fe',
+'ece6b5c75b28c15adde48a58ffc3bb52efa45392',
+'ed738599ef7ce94b8ad4cf3b3fc58130a6a81d22',
+'edf61cfa23afb76e4ae836a2d5637f1e525eaa19',
+'edf61cfa23afb76e4ae836a2d5637f1e525eaa19',
+'ee11661552fb336f86a82b548488beb6ebe695ed',
+'efc3761a77eb9243a26a1778ba4cddf3cb3f5d05',
+'f02e948ba3c7a442d18f30b1344586078fa220d9',
+'f0671e840fd60c8ee07ffa4720e1754afe1b0bba',
+'f33b9119174dcd4003859cf34a9cbb8f80130b83',
+'f500c40563b1ef635f6ef293ce7c2bc0454db703',
+'f50f74e5c9bffbbd19ad5d65db9a51729c351556',
+'f590bec8f136082c37926d92a5f14420ff69f5b5',
+'f5dc99f7120c62adc63149fef9be10bcce7ea7f5',
+'f6e34f706da948e4dfe2df57cba20a34d332600b',
+'f734934b6b9143935676af3d9b82475a032998dc',
+'f8321cb5e88eb48a3e65e9ef60cb05f377cb719b',
+'f85dfbe9c33108ac67fbb251a4887cfdefce9767',
+'f8eb9ac8b5eacb6c91b28df579d917a83909fcb0',
+'f91d25d82017f756d53af9b573621c9f376a0421',
+'fa7d38f43a2761b36ee036197d61f5d1afd4f13a',
+'fff387f469dde708672e5e55a3aa5f96afc610d7')
+
+```
+
+```{r}
+
+jun_nwdc_releases <- jun_detention_df %>% 
+  filter(!is.na(unique_identifier),
+         detention_facility_code == "CSCNWWA",
+         detention_book_out_date_time >= "2025-01-01",
+         detention_book_out_date_time <= "2025-02-28") %>%
+  mutate(geo_track = unique_identifier %in% geo_track_jun_ids) %>% 
+  arrange(detention_book_out_date_time) %>% 
+  distinct(unique_identifier, .keep_all = TRUE)
+
+jul_nwdc_releases <- detention_df %>% 
+  filter(!is.na(unique_identifier),
+         detention_facility_code == "CSCNWWA",
+         detention_book_out_date_time >= "2025-01-01",
+         detention_book_out_date_time <= "2025-02-28") %>%
+  arrange(detention_book_out_date_time) %>% 
+  distinct(unique_identifier, .keep_all = TRUE)
+
+shared_cols <- intersect(names(jun_detention_df), names(jul_nwdc_releases))
+
+# All logged GEO Track IDs are in June detention data
+stopifnot(length(setdiff(geo_track_jun_ids, jun_nwdc_releases$unique_identifier)) == 0)
+
+ids_in_ice_but_not_geo <- setdiff(jun_nwdc_releases$unique_identifier, geo_track_jun_ids)
+
+```
+
+```{r}
+
+# hash_cols <- shared_cols[!shared_cols %in% c("unique_identifier",
+#                                              "detention_")]
+
+hash_cols <- c("stay_book_in_date_time",
+"book_in_date_time",
+"stay_book_out_date",
+"gender",
+"marital_status",
+"birth_year",
+"citizenship_country")
+
+vdigest <- Vectorize(digest)
+
+jun_nwdc_releases <- jun_nwdc_releases %>%
+  rowwise() %>% 
+  tidyr::unite(to_hash, all_of(hash_cols), sep = "", remove = FALSE) %>% 
+  mutate(hash = vdigest(to_hash)) %>%
+  select(-c(to_hash))
+
+jul_nwdc_releases <- jul_nwdc_releases %>%
+  rowwise() %>% 
+  tidyr::unite(to_hash, all_of(hash_cols), sep = "", remove = FALSE) %>% 
+  mutate(hash = vdigest(to_hash)) %>%
+  select(-c(to_hash))
+
+hash_intersect <- intersect(jun_nwdc_releases$hash, jul_nwdc_releases$hash)
+hash_diff <- union(setdiff(jun_nwdc_releases$hash, jul_nwdc_releases$hash), setdiff(jul_nwdc_releases$hash, jun_nwdc_releases$hash))
+
+jun_dupe <- jun_nwdc_releases[duplicated(jun_nwdc_releases$hash) | duplicated(jun_nwdc_releases$hash, fromLast = TRUE),]
+
+stopifnot(nrow(jun_dupe) == 0)
+
+jul_dupe <- jul_nwdc_releases[duplicated(jul_nwdc_releases$hash) | duplicated(jul_nwdc_releases$hash, fromLast = TRUE),]
+
+stopifnot(nrow(jul_dupe) == 0)
+
+jun_nwdc_releases <- jun_nwdc_releases %>% 
+  mutate(differs = hash %in% hash_diff)
+
+jul_nwdc_releases <- jul_nwdc_releases %>% 
+  mutate(differs = hash %in% hash_diff)
+
+```
+
+```{r}
+
+jun_ids <- jun_nwdc_releases %>% 
+  dplyr::select(unique_identifier, hash)
+
+jul_ids <- jul_nwdc_releases %>% 
+  dplyr::select(unique_identifier, hash)
+
+crosswalk <- full_join(jun_ids, jul_ids, by = "hash", suffix = c("_jun", "_jul"))
+
+jun_nwdc_releases <- left_join(jun_nwdc_releases, crosswalk, by="hash")
+
+jul_nwdc_releases <- left_join(jul_nwdc_releases, crosswalk, by="hash")
+
+jun_nwdc_releases %>% 
+  filter(is.na(unique_identifier_jul))
+
+jul_nwdc_releases %>% 
+  filter(is.na(unique_identifier_jun))
+
+final_shared_cols <- intersect(names(jun_nwdc_releases), names(jul_nwdc_releases))
+
+```
+
+```{r full}
+
+jun_nwdc_releases_shared <- jun_nwdc_releases %>% 
+  dplyr::select(all_of(final_shared_cols), -unique_identifier)
+
+jul_nwdc_releases_shared <- jul_nwdc_releases %>% 
+  dplyr::select(all_of(final_shared_cols), -unique_identifier)
+
+full_nwdc_releases <- rbind(jun_nwdc_releases_shared, jul_nwdc_releases_shared) %>% 
+  distinct(hash, .keep_all = TRUE) %>% 
+  mutate(geo_track = unique_identifier_jun %in% geo_track_jun_ids)
+
+write_delim(full_nwdc_releases, here::here('analyze', 'output', 'cscnwwa_releases_jan-feb_crosswalk.csv'), delim = "|")
+
+```
