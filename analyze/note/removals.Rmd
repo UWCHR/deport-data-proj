@@ -118,7 +118,52 @@ detention_removals <- detention_df %>%
 cscnwwa_detentions <- detention_df %>% 
   filter(detention_facility_code == "CSCNWWA")
 
-# cscnwwa_ids <- unique(cscnwwa_detentions$unique_identifier)
+wa_facil <- c("FDLHOLD",
+"HAVMCWA",
+"RICHOLD",
+"SPOHOLD",
+"STJMCWA",
+"TACGHWA",
+"WNTHOLD",
+"ABRDNWA",
+"ADAMSWA",
+"BLHHOLD",
+"BENTOWA",
+"CHELAWA",
+"CLJUVWA",
+"CLARKWA",
+"COWLIWA",
+"COWJVWA",
+"ECOLOWA",
+"FERRYWA",
+"FORKSWA",
+"FRANKWA",
+"GRANTWA",
+"KINCOWA",
+"KITTIWA",
+"MARTIWA",
+"MASONWA",
+"WAMCNEI",
+"CSCNWWA",
+"OKANOWA",
+"PENDOWA",
+"RRFINWA",
+"REGJCWA",
+"BOPSET",
+"SEAICDF",
+"SEAHOLD",
+"SPOKAWA",
+"STEVEWA",
+"SUNNYWA",
+"THURSWA",
+"WHICOWA",
+"YIKIMWA",
+"YAKHOLD")
+
+
+
+wa_detentions <- detention_df %>% 
+  filter(detention_facility_code %in% wa_facil)
 
 ```
 
@@ -134,7 +179,8 @@ removal_ids <- unique(removal_df$unique_identifier)
 removal_df <- removal_df %>% 
   mutate(wa_arrest = unique_identifier %in% wa_arrests$unique_identifier,
          sea_aor_arrest = unique_identifier %in% sea_aor_arrests$unique_identifier,
-         nwdc_detention = unique_identifier %in% cscnwwa_detentions$unique_identifier)
+         nwdc_detention = unique_identifier %in% cscnwwa_detentions$unique_identifier,
+         wa_detention = unique_identifier %in% wa_detentions$unique_identifier)
 
 ```
 
@@ -361,6 +407,8 @@ tab_sea_cit_dep <- removal_df %>%
 
 ```
 
+Note records designated as removals of Venezuelans to El Salvador are not inclusive of all Venezuelans expelled to CECOT
+
 ```{r venezuelans_to_el_salvador}
 
 arr_ven_es <- arrest_df %>% 
@@ -389,6 +437,15 @@ venezuelan_removals_el_salvador <- removal_df %>%
 write_delim(arr_ven_es, here::here('analyze', 'output', 'arr_ven_es.csv'), delim='|')
 write_delim(det_ven_es, here::here('analyze', 'output', 'det_ven_es.csv'), delim='|')
 write_delim(rem_ven_es, here::here('analyze', 'output', 'rem_ven_es.csv'), delim='|')
+
+```
+
+```{r}
+
+rem_ven_cecot <- removal_df %>% 
+  filter(departed_date == as.Date("2025-03-15"),
+         !is.na(unique_identifier),
+         citizenship_country == 'VENEZUELA')
 
 ```
 
