@@ -250,10 +250,10 @@ sea_top_categories <- removals_df %>%
 
 dat <- removals_df %>% 
   filter(docket_aor == "Seattle Area of Responsibility") %>% 
-  mutate(month = floor_date(departed_date, "month"),
-         case_category = case_when(case_category %in% head(sea_top_categories$case_category) ~ case_category,
-                                   TRUE ~ "All others")) %>% 
-  count(month, case_category)
+  mutate(month = floor_date(departed_date, "month")) %>% 
+  count(month, case_category) %>% 
+  group_by(month) %>% 
+  mutate(pct = n / sum(n))
   
 p1 <- dat %>% 
   filter(month >= "2023-11-01",
@@ -263,6 +263,13 @@ p1 <- dat %>%
 
 plotly::ggplotly(p1)
 
+p2 <- dat %>% 
+  filter(month >= "2023-11-01",
+         month < "2025-05-01") %>% 
+  ggplot(aes(x = month, y = pct, fill = case_category)) +
+  geom_col()
+
+plotly::ggplotly(p2)
 ```
 
 # Rights implications of `case_category` codes
@@ -364,6 +371,15 @@ p1 <- dat %>%
   facet_wrap(~type, scales="free_y")
 
 plotly::ggplotly(p1)
+
+p2 <- dat %>% 
+  filter(month >= "2023-11-01",
+         month < "2025-06-01") %>% 
+  ggplot(aes(x = month, y = pct, fill = case_category_group)) +
+  geom_col(position="fill") +
+  facet_wrap(~type)
+
+plotly::ggplotly(p2)
 
 ```
 
