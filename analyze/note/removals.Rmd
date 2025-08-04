@@ -343,12 +343,15 @@ p3
 ```{r tab_docket}
 
 tab_docket <- removal_df %>%
+  filter(departed_date >= "2025-01-01") %>% 
   count(docket_aor)
 
 tab_docket_wa <- removal_df %>%
+  filter(departed_date >= "2025-01-01") %>% 
   count(docket_aor, wa_arrest)
 
 tab_docket_nwdc <- removal_df %>%
+  filter(departed_date >= "2025-01-01") %>% 
   count(docket_aor, nwdc_detention)
 
 ```
@@ -394,14 +397,17 @@ tab_sea_pod_2025_india <- removal_df %>%
 ```{r docket_aor_port_of_depart}
 
 tab_sea_cit <- removal_df %>% 
+  filter(departed_date >= "2025-01-01") %>% 
   filter(docket_aor == "Seattle Area of Responsibility") %>% 
   count(citizenship_country)
 
 tab_sea_dep <- removal_df %>% 
+  filter(departed_date >= "2025-01-01") %>% 
   filter(docket_aor == "Seattle Area of Responsibility") %>% 
   count(departure_country)
 
 tab_sea_cit_dep <- removal_df %>% 
+  filter(departed_date >= "2025-01-01") %>% 
   filter(docket_aor == "Seattle Area of Responsibility") %>% 
   count(citizenship_country, departure_country)
 
