@@ -449,7 +449,9 @@ write_delim(rem_ven_es, here::here('analyze', 'output', 'rem_ven_es.csv'), delim
 ```{r}
 
 rem_ven_cecot <- removal_df %>% 
-  filter(departed_date == as.Date("2025-03-15"),
+  filter(departed_date == as.Date("2025-03-15")|
+           departed_date == as.Date("2025-03-31")|
+           departed_date == as.Date("2025-04-13"),
          !is.na(unique_identifier),
          citizenship_country == 'VENEZUELA')
 

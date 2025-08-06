@@ -110,7 +110,7 @@ removal_ids <- unique(removal_df$unique_identifier)
 
 ```
 
-Tuan Phan: 2b523cdad2a0705f5f06c4a1860c606e439c8abe
+Tuan Phan: 2b523cdad2a0705f5f06c4a1860c606e439c8abe (Jun) a368928348a2bf82b7c3f9377d66e41002cb762d (Jul)
 
 ```{r}
 
@@ -184,7 +184,7 @@ lookup_enforcement <- function(id_to_search) {
            aor = responsible_aor,
            loc = responsible_site) %>% 
     filter(unique_identifier == id_to_search) %>% 
-    dplyr::select(unique_identifier, date, aor, loc, ) %>% 
+    dplyr::select(unique_identifier, date, aor, loc, shared_cols) %>% 
     mutate(type = "encounter")
   
   detainer_recs <- detainer_df %>% 
@@ -192,7 +192,7 @@ lookup_enforcement <- function(id_to_search) {
            aor = facility_aor,
            loc = detention_facility) %>% 
     filter(unique_identifier == id_to_search) %>% 
-    dplyr::select(unique_identifier, date, aor, loc, ) %>% 
+    dplyr::select(unique_identifier, date, aor, loc, shared_cols) %>% 
     mutate(type = "detainer")
   
   arrest_recs <- arrest_df %>% 
@@ -200,7 +200,7 @@ lookup_enforcement <- function(id_to_search) {
            aor = apprehension_aor,
            loc = apprehension_state) %>% 
     filter(unique_identifier == id_to_search) %>% 
-    dplyr::select(unique_identifier, date, aor, loc, ) %>% 
+    dplyr::select(unique_identifier, date, aor, loc, shared_cols) %>% 
     mutate(type = "arrest")
   
   detention_book_in_recs <- detention_df %>% 
@@ -208,7 +208,7 @@ lookup_enforcement <- function(id_to_search) {
            aor = "",
            loc = detention_facility) %>% 
     filter(unique_identifier == id_to_search) %>% 
-    dplyr::select(unique_identifier, date, aor, loc, ) %>% 
+    dplyr::select(unique_identifier, date, aor, loc, shared_cols) %>% 
     mutate(type = "detention book-in")
   
   detention_book_out_recs <- detention_df %>% 
@@ -216,7 +216,7 @@ lookup_enforcement <- function(id_to_search) {
            aor = "",
            loc = detention_facility) %>% 
     filter(unique_identifier == id_to_search) %>% 
-    dplyr::select(unique_identifier, date, aor, loc, ) %>% 
+    dplyr::select(unique_identifier, date, aor, loc, shared_cols) %>% 
     mutate(type = "detention book-out")
   
   detention_recs <- rbind(detention_book_in_recs, detention_book_out_recs) %>% 
@@ -227,7 +227,7 @@ lookup_enforcement <- function(id_to_search) {
            aor = docket_aor,
            loc = port_of_departure) %>% 
     filter(unique_identifier == id_to_search) %>% 
-    dplyr::select(unique_identifier, date, aor, loc, ) %>% 
+    dplyr::select(unique_identifier, date, aor, loc, shared_cols) %>% 
     mutate(type = "removal")
   
   enforce_history <- rbind(encounter_recs,
@@ -274,5 +274,22 @@ cecot_6 <- lookup_enforcement("129045ad3aa54bc7a1d75f0eb10fbe46c8655ce1")
 temp <- rbind(cecot_1, cecot_2, cecot_3, cecot_4, cecot_5, cecot_6)
 
 write_delim(temp, here::here('analyze', 'output', 'cecot_enforcement_histories.csv'), delim=',', na="")
+
+```
+
+```{r}
+
+mar_8_rem_1 <- lookup_enforcement("4f3c482c06c80c256789c00c4ce089170dec9fcc")
+mar_8_rem_2 <- lookup_enforcement("843819825de5ddc381c477977847a80a0548b6d2")
+mar_8_rem_3 <- lookup_enforcement("936fde6b9a188c7de19f2b194af416a14bb31226")
+mar_8_rem_4 <- lookup_enforcement("b6a396b46845aa245798cebc167a42f92974c5ae")
+mar_8_rem_5 <- lookup_enforcement("c48fd5c0164df37ad88b11b1faded8051c553d42")
+mar_8_rem_6 <- lookup_enforcement("c556d4761f607283e29278350de36e5b6f41d437")
+mar_8_rem_7 <- lookup_enforcement("cc0250354d89105482b537832524d94dce59ef96")
+mar_8_rem_8 <- lookup_enforcement("ce445ea17043d89acf655c5f593f2e35c41df5f7")
+
+march8_removals_lookup <- rbind(mar_8_rem_1, mar_8_rem_2, mar_8_rem_3, mar_8_rem_4, mar_8_rem_5, mar_8_rem_6, mar_8_rem_7, mar_8_rem_8)
+
+write_delim(march8_removals_lookup, here::here('analyze', 'output', 'mar_8_removals_enforcement_histories.csv'), delim=',', na="")
 
 ```

@@ -130,10 +130,10 @@ detention_df <- detention_df %>%
 ```{r sample_daily_roster}
 
 facil_code <- "CSCNWWA"
-date <- as.Date("2025-01-01")
+date <- as.Date("2025-03-08")
   
-timeline_start <- as.Date("2025-01-01")
-timeline_end <- as.Date("2025-02-28")
+timeline_start <- as.Date("2025-03-03")
+timeline_end <- as.Date("2025-03-09")
 timeline <- seq(timeline_start, timeline_end, by='day')
 
 ```
