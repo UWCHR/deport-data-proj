@@ -455,6 +455,79 @@ rem_ven_cecot <- removal_df %>%
          !is.na(unique_identifier),
          citizenship_country == 'VENEZUELA')
 
+rem_ven_apr_may <- removal_df %>% 
+  filter(departed_date >= as.Date("2025-03-01") & departed_date <= as.Date("2025-04-30"),
+         !is.na(unique_identifier),
+         citizenship_country == "VENEZUELA")
+
+rem_ven_apr_4 <- removal_df %>% 
+  filter(departed_date == as.Date("2025-04-04"),
+         !is.na(unique_identifier),
+         citizenship_country == 'VENEZUELA')
+
+```
+
+```{r rem_ven}
+
+dat <- removal_df %>% 
+  filter(citizenship_country == "VENEZUELA")
+
+p1 <- dat %>% 
+  mutate(yearmon = as.yearmon(departed_date)) %>% 
+  count(yearmon, departure_country) %>% 
+  ggplot(aes(x = yearmon, y = n, fill = departure_country)) +
+  geom_col() +
+  gghighlight(departure_country == "EL SALVADOR")
+
+p1
+
+p2 <- dat %>% 
+  mutate(yearmon = as.yearmon(departed_date),
+         docket_aor = str_replace(docket_aor, " Area of Responsibility", "")) %>% 
+  count(yearmon, docket_aor) %>% 
+  ggplot(aes(x = yearmon, y = n, fill = docket_aor)) +
+  geom_col() +
+  gghighlight(docket_aor == "Seattle")
+
+p2
+
+```
+
+```{r}
+
+cecot_flight_det_histories <- detention_df %>% 
+  filter(unique_identifier %in% rem_ven_cecot$unique_identifier,
+         as.Date(detention_book_out_date_time) == as.Date("2025-03-15"))
+
+dat <- detention_df %>% 
+  filter(
+         citizenship_country == "VENEZUELA")  %>% 
+  filter(book_in_date_time >= as.Date('2025-01-01')) %>% 
+  mutate(book_in_date = as.Date(book_in_date_time))
+
+dat_top_facil <- dat %>% 
+  count(detention_facility_code) %>% 
+  arrange(desc(n))
+
+p1 <- dat %>% 
+  count(book_in_date, detention_facility_code) %>% 
+  ggplot(aes(x=book_in_date, y = n, fill = detention_facility_code)) + 
+  geom_col() +
+  gghighlight(detention_facility_code %in% c("WEBDCTX", "RGRNDTX", "ELVDFTX"))
+
+p1
+
+```
+
+```{r}
+
+cecot_flight_arr_histories <- arrest_df %>% 
+  filter(unique_identifier %in% rem_ven_cecot$unique_identifier)
+
+cecot_flight_arr_histories %>% 
+  count(apprehension_aor) %>% 
+  arrange(desc(n))
+
 ```
 
 ## Comparing various datasets/subsets for removal trends over time
