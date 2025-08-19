@@ -13,5 +13,6 @@
 *.feather
 *.xlsx
 *.log
+analyze/output/*
 write/output/*
 !share/input/facilities.csv.gz
