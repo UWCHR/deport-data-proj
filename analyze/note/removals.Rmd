@@ -160,8 +160,6 @@ wa_facil <- c("FDLHOLD",
 "YIKIMWA",
 "YAKHOLD")
 
-
-
 wa_detentions <- detention_df %>% 
   filter(detention_facility_code %in% wa_facil)
 
@@ -490,6 +488,25 @@ p2 <- dat %>%
   gghighlight(docket_aor == "Seattle")
 
 p2
+
+p3 <- dat %>% 
+  filter(gender == "Female") %>% 
+  count(departed_date, gender) %>% 
+  ggplot(aes(x = departed_date, y = n, fill = gender)) +
+  geom_col()
+
+p3
+
+p4 <- rem_ven_cecot %>% 
+  mutate(yearmon = as.yearmon(departed_date)) %>% 
+  count(yearmon, gender) %>% 
+  ggplot(aes(x = yearmon, y = n, fill = gender)) +
+  geom_col()
+
+p4
+
+temp <- rem_ven_cecot %>% 
+  filter(gender == "Female")
 
 ```
 

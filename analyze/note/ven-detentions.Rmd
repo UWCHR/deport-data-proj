@@ -1,0 +1,493 @@
+---
+title: "ICE ERO-LESA detention data Nov. 2023-Feb. 2025"
+author: "UWCHR"
+date: "2025-03-25"
+output:
+    html_document:
+        html_preview: true
+        toc: true
+        toc_depth: 3
+        toc_float: true
+        code_folding: hide
+---
+
+
+```{r setup, message=FALSE, warning=FALSE, include=TRUE}
+
+options(scipen = 1000000)
+
+library(pacman)
+
+p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, digest, ggsankeyfier)
+
+file <- "ice_detentions_nov23-jul25.csv.gz"
+
+df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
+  janitor::clean_names() %>% 
+  mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
+         book_in_date_time = ymd_hms(book_in_date_time),
+         detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
+         stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
+         )
+
+```
+
+```{r headcounter_setup, message=FALSE, warning=FALSE, include=TRUE}
+
+# Transform data to "fill in" missing `detention_book_out_date_time` values
+# in order to account for ongoing detention stays at time of release of data
+max_date <- max(df$stay_book_out_date_time, na.rm=TRUE)
+
+df <- df %>%
+  mutate(detention_book_out_date_time_min = 
+           case_when(is.na(detention_book_out_date_time) ~ max_date,
+                     TRUE ~ detention_book_out_date_time))
+
+# Define timeline for calculation of daily detained population
+timeline_start <- min(df$stay_book_in_date_time, na.rm=TRUE)
+timeline_end <- max(df$stay_book_out_date_time, na.rm=TRUE)
+timeline <- seq(timeline_start, timeline_end, by='day')
+
+# Function counts all in-range detention placement records in dataset `df` for a
+# given `date` by a given grouping variable `var`
+headcounter <- function(date, df, group_vars) {
+  
+  in_range <- df[df$book_in_date_time <= date & df$detention_book_out_date_time_min > date,]
+  
+  in_range %>% 
+    group_by(across(all_of(group_vars))) %>% 
+    summarize(n = n()) %>% 
+    complete(fill = list(n = 0)) %>% 
+    mutate(date=date)
+  
+  }
+
+```
+
+```{r facil_headcount, warning=FALSE, message=FALSE}
+
+# Generate limited sample dataset
+temp_df <- df %>%
+  filter(citizenship_country == "VENEZUELA")
+
+# Apply function to timeline
+example_headcount <- lapply(timeline, headcounter, df=temp_df, group_vars=c('detention_facility_code', 'gender'))
+
+# Transform output into data frame
+example_headcount_data <- map_dfr(example_headcount, bind_rows)
+
+# Plot headcount
+p1 <- example_headcount_data %>%
+  filter(date >= "2023-11-15",
+         detention_facility_code %in% c("WEBDCTX", "RGRNDTX", "ELVDFTX")) %>%
+  ggplot(aes(x = date, y = n, color = detention_facility_code), group = detention_facility_code ) +
+  geom_line() +
+  facet_wrap(~gender) +
+  labs(title = "Daily detained population by `detention_facility_code`",
+       subtitle = "`citizenship_country` == 'VENEZUELA'")
+
+p1
+
+# Plot headcount
+p2 <- example_headcount_data %>%
+  filter(date >= "2025-01-01",
+         detention_facility_code %in% c("WEBDCTX", "RGRNDTX", "ELVDFTX")) %>%
+  ggplot(aes(x = date, y = n, color = detention_facility_code), group = detention_facility_code ) +
+  geom_line() +
+  geom_vline(xintercept = as.numeric(as.Date("2025-03-15"))) +
+  facet_wrap(~gender) +
+  labs(title = "Daily detained population by `detention_facility_code`",
+       subtitle = "`citizenship_country` == 'VENEZUELA'")
+
+p2
+
+```
+
+
+```{r facil_headcount}
+
+# Generate limited sample dataset
+temp_df <- df %>%
+  filter(detention_facility_code == "CSCNWWA",
+         placement_count > 1)
+
+# Apply function to timeline
+example_headcount <- lapply(timeline, headcounter, df=temp_df, group_vars=c('prev_facil'))
+
+# Transform output into data frame
+example_headcount_data <- map_dfr(example_headcount, bind_rows) %>% 
+  filter(date >= "2023-11-15") %>%
+  mutate(week = floor_date(date, "week", week_start = "Monday")) %>% 
+  group_by(week, prev_facil) %>% 
+  summarize(adp = mean(n))
+
+# Plot headcount
+p1 <- example_headcount_data %>%
+  
+  ggplot(aes(x = week, y = adp, color = prev_facil), group = prev_facil ) +
+  geom_line() +
+  labs(title = "Weekly ADP population by `prev_facil`",
+       subtitle = "Northwest ICE Processing Center")
+
+plotly::ggplotly(p1)
+
+```
+
+
+```{r facil_headcount_citizenship}
+
+# Generate limited sample dataset
+temp_df <- df %>%
+  filter(detention_facility_code == "CSCNWWA")
+
+# Apply function to timeline
+example_headcount <- lapply(timeline, headcounter, df=temp_df, group_vars=c('citizenship_country'))
+
+top <- temp_df %>%
+  filter(!is.na(citizenship_country)) %>%
+  count(citizenship_country) %>%
+  arrange(desc(n)) %>%
+  head(10)
+
+# Transform output into data frame
+example_headcount_data <- map_dfr(example_headcount, bind_rows)
+
+# Plot headcount
+p1 <- example_headcount_data %>%
+  mutate(citizenship_country = case_when(citizenship_country %in% top$citizenship_country ~ citizenship_country,
+                                         is.na(citizenship_country) ~ NA,
+                                         TRUE ~ "ALL OTHERS"),
+         date = as.Date(date)) %>%
+  group_by(citizenship_country, date) %>%
+  summarize(n = sum(n)) %>%
+  filter(date >= "2023-11-15") %>%
+  ggplot(aes(x = date, y = n, color = citizenship_country), group = citizenship_country ) +
+  geom_line() +
+  labs(title = "Daily detained population by `citizenship_country`",
+       subtitle = "Northwest ICE Processing Center")
+
+p1
+
+# Plot headcount
+p2 <- example_headcount_data %>%
+  mutate(date = as.Date(date)) %>%
+  group_by(citizenship_country, date) %>%
+  summarize(n = sum(n)) %>%
+  filter(date >= "2023-11-15") %>%
+  ggplot(aes(x = date, y = n, color = citizenship_country), group = citizenship_country ) +
+  geom_line() +
+  labs(title = "Daily detained population by `citizenship_country`",
+       subtitle = "Northwest ICE Processing Center")
+
+plotly::ggplotly(p2)
+
+
+```
+
+```{r detention_outcomes}
+
+dat <- df %>% 
+  filter(!is.na(stay_release_reason)) %>%
+  mutate(unique_identifier = paste(unique_identifier, stay_count, sep = '-')) %>% 
+  distinct(unique_identifier, .keep_all=TRUE) %>% 
+  mutate(week = floor_date(book_in_date_time, "week", week_start = "Monday"),
+         trump = book_in_date_time >= "2025-01-20") %>% 
+  count(trump, week, stay_release_reason) %>% 
+  group_by(trump, stay_release_reason) %>% 
+  summarize(weekly_mean_releases = mean(n))
+
+p1 <- dat %>% 
+  ggplot(aes(y = stay_release_reason, x = weekly_mean_releases, fill = trump)) +
+  geom_col(position='dodge')
+
+p1
+
+dat2 <- dat %>% 
+  pivot_wider(id_cols='stay_release_reason', names_from = "trump", names_prefix="trump_", values_from= 'weekly_mean_releases') %>% 
+  mutate(pct_change = ((trump_TRUE - trump_FALSE) / trump_FALSE) * 100) %>% 
+  arrange(desc(pct_change))
+
+p2 <- dat2 %>% 
+  filter(!is.na(pct_change)) %>% 
+  mutate(stay_release_reason = fct_reorder(as.character(stay_release_reason), pct_change),
+         pos = pct_change > 0) %>% 
+  ggplot(aes(x = pct_change, y = stay_release_reason, fill = pos)) +
+  geom_col(show.legend = FALSE) +
+  labs(title = "% change in weekly avg. detention release in first weeks of Trump II")
+
+p2
+
+# What does it mean for a detention stay to end as "Transferred"?
+
+```
+
+```{r detention_outcomes}
+
+dat <- df %>% 
+  filter(!is.na(stay_release_reason)) %>% 
+  mutate(week = floor_date(book_in_date_time, "week", week_start = "Monday"),
+         trump = book_in_date_time >= "2025-01-20") %>% 
+  count(trump, week, stay_release_reason) %>% 
+  group_by(trump, stay_release_reason) %>% 
+  summarize(weekly_mean_releases = mean(n))
+
+p1 <- dat %>% 
+  ggplot(aes(y = stay_release_reason, x = weekly_mean_releases, fill = trump)) +
+  geom_col(position='dodge')
+
+p1
+
+dat2 <- dat %>% 
+  pivot_wider(id_cols='stay_release_reason', names_from = "trump", names_prefix="trump_", values_from= 'weekly_mean_releases') %>% 
+  mutate(pct_change = ((trump_TRUE - trump_FALSE) / trump_FALSE) * 100) %>% 
+  arrange(desc(pct_change))
+
+p2 <- dat2 %>% 
+  filter(!is.na(pct_change)) %>% 
+  mutate(stay_release_reason = fct_reorder(as.character(stay_release_reason), pct_change),
+         pos = pct_change > 0) %>% 
+  ggplot(aes(x = pct_change, y = stay_release_reason, fill = pos)) +
+  geom_col(show.legend = FALSE) +
+  labs(title = "% change in weekly avg. detention release in first months of Trump II")
+
+p2
+
+# What does it mean for a detention stay to end as "Transferred"?
+
+```
+
+```{r seahold}
+
+dat <- df %>% 
+  filter(detention_facility_code == "CSCNWWA",
+         placement_count == total_placements)
+
+temp <- dat %>%
+  count(stay_release_reason) %>% 
+  arrange(desc(n))
+
+```
+
+```{r wa_bookins}
+
+wa_bookins <- df %>% 
+  filter(detention_facility_code %in% wa_facil) %>% 
+  filter(stay_book_in_date_time >= "2023-11-01") %>% 
+  mutate(week = floor_date(stay_book_in_date_time, "week", week_start = "Monday"),
+         yearmon = as.yearmon(stay_book_in_date_time))
+
+write_delim(wa_bookins, here::here('analyze', 'output', 'wa_bookins.csv'), delim=',')
+
+t1 <- wa_bookins %>% 
+  filter(stay_book_in_date_time >= "2025-01-20") %>% 
+  count(detention_facility)
+
+p1 <- wa_bookins %>% 
+  filter(stay_book_in_date_time >= "2023-11-01") %>% 
+  count(yearmon, detention_facility) %>% 
+  ggplot(aes(x = yearmon, y = n, fill = detention_facility)) +
+  geom_col()
+
+p1
+
+p2 <- wa_bookins %>% 
+  filter(stay_book_in_date_time >= "2025-01-01") %>% 
+  count(week, detention_facility) %>% 
+  ggplot(aes(x = week, y = n, fill = detention_facility)) +
+  geom_col() +
+  labs(title = "Weekly WA detention facil. book-ins",
+       subtitle = "Since Jan. 2025")
+
+p2
+
+```
+
+
+```{r natl_headcount_per_facil}
+
+headcount_df <- read_delim(here::here('detain-headcount', 'output', 'headcount_detloc_nov23-jul25.csv.gz'), delim='|')
+
+cscnwwa <- headcount_df %>% 
+  filter(detention_facility_code == "CSCNWWA")
+
+wa_facil_headcount <- headcount_df %>% 
+  filter(detention_facility_code %in% wa_facil)
+
+write_delim(wa_facil_headcount, here::here('analyze', 'output', 'wa_facil_headcount.csv'), delim=',')
+
+p1 <- wa_facil_headcount %>% 
+  filter(date >= "2023-11-01",
+         detention_facility_code == "CSCNWWA") %>% 
+  ggplot(aes(x = date, y = n, color = detention_facility_code)) +
+  geom_line() +
+  ylim(0, NA) +
+  labs(title = "Daily detained population",
+      subtitle = "NW ICE PROCESSING CENTER")
+ 
+p1
+
+p2 <- wa_facil_headcount %>% 
+  filter(date >= "2025-01-01",
+         str_detect(detention_facility_code, "HOLD")) %>%
+  ggplot(aes(x = date, y = n, color = detention_facility_code)) +
+  geom_line() +
+  ylim(0, NA) +
+  labs(title = "Daily detained population",
+      subtitle = "WA hold rooms")
+ 
+p2
+
+```
+
+```{r 24_hr_headcounter_setup, message=FALSE, warning=FALSE, include=TRUE}
+
+# This is intended to be a 24-hour inclusive population count, versus midnight headcount
+
+# Transform data to "fill in" missing `detention_book_out_date_time` values
+# in order to account for ongoing detention stays at time of release of data
+max_date <- max(df$stay_book_out_date_time, na.rm=TRUE)
+
+df <- df %>%
+  mutate(detention_book_out_date_time_min = 
+           case_when(is.na(detention_book_out_date_time) ~ max_date,
+                     TRUE ~ detention_book_out_date_time))
+
+# Define timeline for calculation of daily detained population
+timeline_start <- date(min(df$stay_book_in_date_time, na.rm=TRUE))
+timeline_end <- date(max(df$stay_book_out_date_time, na.rm=TRUE))
+timeline <- seq(timeline_start, timeline_end, by='day')
+
+# Function counts all in-range detention placement records in dataset `df` for a
+# given `date` by a given grouping variable `var`
+headcounter_24hr <- function(date, df, group_vars) {
+  
+  in_range <- df[date(df$book_in_date_time) <= date(date) & date(df$detention_book_out_date_time_min) > date(date),]
+  
+  in_range %>% 
+    group_by(across(all_of(group_vars))) %>% 
+    summarize(n = n()) %>% 
+    complete(fill = list(n = 0)) %>% 
+    mutate(date=date)
+  
+  }
+
+```
+
+```{r cscnwwa_24_hr_headcount}
+
+# Generate limited sample dataset
+temp_df <- df %>%
+  filter(detention_facility_code == "CSCNWWA")
+
+# Apply function to timeline
+cscnwwa_24_hr <- lapply(timeline, headcounter_24hr, df=temp_df, group_vars=c('detention_facility_code'))
+
+
+# Transform output into data frame
+cscnwwa_24_hr <- map_dfr(cscnwwa_24_hr, bind_rows)
+
+```
+
+Is this right? Why would 24-hr inclusive headcount ever be lower than midnight headcount? Double check logics here and in headcount script. What happens in case of duplicate book-in/out?
+
+```{r compare_headcounts}
+
+cscnwwa <- cscnwwa %>% 
+  mutate(type = "headcount")
+
+cscnwwa_24_hr <- cscnwwa_24_hr %>% 
+  mutate(type = "24-hr")
+
+dat <- rbind(cscnwwa, cscnwwa_24_hr)
+
+dat_wide <- dat %>% 
+  pivot_wider(id_cols = "date", names_from="type", values_from="n") %>% 
+  mutate(diff = `24-hr` - headcount)
+
+p1 <- dat %>% 
+  ggplot(aes(x=date, y = n, color = type)) +
+  geom_line()
+
+p1
+
+p2 <- dat_wide %>% 
+  ggplot(aes(x = date , y=diff)) +
+  geom_line()
+
+p2
+
+```
+
+```{r geotrack}
+
+geotrack <- read_delim(here::here('analyze', 'hand', 'cscnwwa_geo_track.csv'), delim='|') %>% 
+  mutate(detention_facility_code = "CSCNWWA")
+
+cscnwwa_2025 <- cscnwwa %>% 
+  mutate(type = "headcount") %>% 
+  filter(date >= "2025-01-01")
+
+dat <- rbind(cscnwwa_2025, geotrack)
+
+dat_wide <- dat %>% 
+  pivot_wider(id_cols = "date", names_from="type", values_from="n") %>% 
+  mutate(diff = geo_track - headcount,
+         week = week(date),
+         wday = wday(date))
+
+p1 <- dat %>% 
+  ggplot(aes(x=date, y = n, color = type)) +
+  geom_line()
+
+p1
+
+p2 <- dat_wide %>% 
+  ggplot(aes(x = date , y=diff)) +
+  geom_line()
+
+p2
+
+p3 <- dat_wide %>% 
+  filter(date < "2025-03-01") %>% 
+  ggplot(aes(x = wday , y=diff, color = week)) +
+  geom_line(aes(group = week))
+
+p3
+
+```
+
+```{r arrivals_departures}
+
+cscnwwa_departures <- df %>% 
+  filter(detention_facility_code == "CSCNWWA",
+         detention_book_out_date_time >= as.Date("2025-01-01"),
+         detention_book_out_date_time <= as.Date("2025-02-28")) %>% 
+  mutate(date = as.Date(detention_book_out_date_time),
+         type = "departures")
+
+dat_1 <- cscnwwa_departures %>% 
+  distinct(unique_identifier, .keep_all="TRUE") %>% 
+  count(date, type)
+
+cscnwwa_arrivals <- df %>% 
+  filter(detention_facility_code == "CSCNWWA",
+         book_in_date_time >= as.Date("2025-01-01"),
+         book_in_date_time <= as.Date("2025-02-28")) %>% 
+  mutate(date = as.Date(book_in_date_time), 
+         type = "arrivals")
+
+dat_2 <- cscnwwa_arrivals %>% 
+  distinct(unique_identifier, .keep_all="TRUE") %>% 
+  count(date, type)
+
+dat <- rbind(dat_1, dat_2)
+
+dat_wide_2 <- dat %>% 
+  pivot_wider(id_cols = "date", names_from="type", values_from="n") %>% 
+  arrange(date)
+
+dat_wide <- left_join(dat_wide, dat_wide_2, by = 'date')
+
+write_delim(dat_wide, here::here('analyze', 'output', 'cscnwwa_ice_vs_geo_track.csv'), na='', delim='|')
+
+```

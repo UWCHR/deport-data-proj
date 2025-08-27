@@ -20,9 +20,14 @@ library(pacman)
 
 p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, digest)
 
-file <- "headcount_detloc_nov23-jun25.csv.gz"
+file_jun <- "headcount_detloc_nov23-jun25.csv.gz"
 
-df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
+df_jun <- read_delim(here('analyze', 'input', file_jun), delim='|') %>% 
+  mutate(date = as.Date(date))
+
+file_jul <- "headcount_detloc_nov23-jul25.csv.gz"
+
+df <- read_delim(here('analyze', 'input', file_jul), delim='|') %>% 
   mutate(date = as.Date(date))
 
 ```
@@ -188,11 +193,11 @@ p2.1
 ```{r old_headcount}
 
 old_headcount <- read_delim(here::here('analyze', 'input', 'headcount_fy12-24ytd.csv.gz')) %>% 
-  mutate(dataset = "UWCHR")
-  # filter(date >= "2011-11-01")
+  mutate(dataset = "UWCHR") %>% 
+  filter(date >= "2011-11-01")
 
 new_headcount <- df %>% 
-  # filter(date >= "2023-11-15") %>%
+  filter(date >= "2023-11-15") %>%
   dplyr::select(date, n, detention_facility_code) %>% 
   mutate(dataset = "Deportation Data Project")
 
@@ -242,28 +247,88 @@ p2
 
 ```{r old_headcount_cscnwwa}
 
-old_headcount <- read_delim(here::here('analyze', 'input', 'headcount_fy11-24ytd.csv.gz')) %>% 
+old_headcount_cscnwwa <- old_headcount %>% 
   mutate(dataset = "UWCHR") %>% 
   filter(date >= "2011-11-01",
          detention_facility_code == "CSCNWWA"
          )
 
-new_headcount <- df %>% 
+new_headcount_cscnwwa <- df %>% 
   filter(date >= "2023-11-15",
          detention_facility_code == "CSCNWWA") %>%
   dplyr::select(date, n, detention_facility_code) %>% 
   mutate(dataset = "Deportation Data Project")
 
-dat <- rbind(old_headcount, new_headcount)
+dat <- rbind(old_headcount_cscnwwa, new_headcount_cscnwwa)
 
 p1 <- dat %>% 
   group_by(dataset, date) %>% 
   summarize(n = sum(n)) %>% 
   ggplot(aes(x = date, y = n, color = dataset)) +
   geom_line() +
+  geom_hline(yintercept = 1575) +
   ylim(0, NA) +
-  labs(title = "NWDC detention population, Nov. 2011 - Jun. 2025",
+  labs(title = "NWDC detention population, Nov. 2011 - Jul. 2025",
        subtitle = "Comparison of UWCHR, Deportation Data Project datasets")
+
+p1
+
+```
+
+```{r jun_jul_release_compare}
+
+df_jul <- df %>% 
+  mutate(release = "2025-08") %>% 
+  dplyr::select(detention_facility_code, n, date, release)
+
+df_jun <- df_jun %>% 
+  mutate(release = "2025-07")
+
+dat <- rbind(df_jul, df_jun)
+
+dat <- dat %>% 
+  group_by(date, release) %>% 
+  summarize(n = sum(n))
+
+p1 <- dat %>% 
+  filter(date >= "2023-11-01") %>% 
+  ggplot(aes(x = date, y = n, color = release)) +
+  geom_line()
+
+p1
+
+p2 <- dat %>% 
+  filter(date >= "2025-06-01") %>% 
+  ggplot(aes(x = date, y = n, color = release)) +
+  geom_line()
+
+p2
+
+dat_wide <- dat %>% 
+  pivot_wider(id_cols = c(date), values_from = n, names_from = release, names_prefix="release_") %>% 
+  mutate(diff = `release_2025-08` - `release_2025-07`)
+
+p3 <- dat_wide %>% 
+  filter(date >= "2023-11-01") %>% 
+  ggplot(aes(x = date, y = diff)) +
+  geom_line() +
+  labs(title="Aug headcount minus July headcount")
+
+p3
+
+```
+
+```{r}
+
+dat <- df %>% 
+  filter(detention_facility_code %in% c("WEBDCTX", "RGRNDTX", "ELVDFTX"))
+
+p1 <- dat %>% 
+  filter(date >= "2025-03-01",
+         date <= "2025-04-30") %>% 
+  ggplot(aes(x = date, y = n, color = detention_facility_code)) +
+  geom_line() +
+  ylim(0,NA)
 
 p1
 

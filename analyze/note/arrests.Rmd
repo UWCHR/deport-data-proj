@@ -1,7 +1,7 @@
 ---
-title: "ICE ERO-LESA arrests data Nov. 2023-Feb. 2025"
+title: "ICE ERO-LESA arrests data Nov. 2023-Jul. 2025"
 author: "UWCHR"
-date: "2025-03-25"
+date: "2025-08-20"
 output:
     html_document:
         html_preview: true
@@ -27,7 +27,7 @@ This notebook analyzes ICE administrative arrest data obtained via FOIA by the [
 
 ```{r load_arrests, message=FALSE, warning=FALSE, include=TRUE}
 
-file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests.xlsx"
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests_LESA-STU_FINAL_Redacted_raw.xlsx"
 
 arrest_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
   janitor::clean_names() %>% 
@@ -36,7 +36,8 @@ arrest_df <- read_excel(here('analyze', 'input', file), skip=6) %>%
   mutate(criminality = apprehension_criminality == "1 Convicted Criminal") |>
   mutate(n_dupe = row_number(), .by = c("apprehension_date", "apprehension_method", "apprehension_criminality", "unique_identifier")) |>
   filter(is.na(unique_identifier) | n_dupe == 1) |>
-  mutate(week = floor_date(apprehension_date, "week", week_start = "Monday"))
+  mutate(week = floor_date(apprehension_date, "week", week_start = "Monday"),
+         release = "DDP Aug")
 
 ```
 
@@ -673,4 +674,69 @@ p1 <- dat %>%
 
 p1
   
+```
+
+# Comparison of Jul/Aug releases
+
+```{r load_arrests_jul, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests.xlsx"
+
+arrest_df_jul <- read_excel(here('analyze', 'input', file), skip=6) %>% 
+  janitor::clean_names() %>% 
+  mutate(apprehension_date = as.Date(apprehension_date)) |>
+  mutate(apprehension_method = fct(apprehension_method)) |>
+  mutate(criminality = apprehension_criminality == "1 Convicted Criminal") |>
+  mutate(n_dupe = row_number(), .by = c("apprehension_date", "apprehension_method", "apprehension_criminality", "unique_identifier")) |>
+  filter(is.na(unique_identifier) | n_dupe == 1) |>
+  mutate(week = floor_date(apprehension_date, "week", week_start = "Monday"),
+         release = "DDP July")
+
+```
+
+```{r load_arrests, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests_LESA-STU_FINAL_Redacted_raw.xlsx"
+
+arrest_df_aug <- read_excel(here('analyze', 'input', file), skip=6) %>% 
+  janitor::clean_names() %>% 
+  mutate(apprehension_date = as.Date(apprehension_date)) |>
+  mutate(apprehension_method = fct(apprehension_method)) |>
+  mutate(criminality = apprehension_criminality == "1 Convicted Criminal") |>
+  mutate(n_dupe = row_number(), .by = c("apprehension_date", "apprehension_method", "apprehension_criminality", "unique_identifier")) |>
+  filter(is.na(unique_identifier) | n_dupe == 1) |>
+  mutate(week = floor_date(apprehension_date, "week", week_start = "Monday"),
+         release = "DDP Aug")
+
+```
+
+```{r}
+
+dat_jul <- arrest_df_jul %>% 
+  group_by(week, release) %>% 
+  summarize(n = n())
+
+dat_aug <- arrest_df_aug %>% 
+  group_by(week, release) %>% 
+  summarize(n = n())
+
+dat <- rbind(dat_jul, dat_aug)
+
+p1 <- dat %>% 
+  ggplot(aes(x = week, y = n, color = release)) +
+  geom_line()
+
+p1
+
+dat_wide <- dat %>% 
+  pivot_wider(id_cols = c(week), values_from = n, names_from = release) %>% 
+  mutate(diff = `DDP Aug` - `DDP July`)
+
+p3 <- dat_wide %>% 
+  ggplot(aes(x = week, y = diff)) +
+  geom_line() +
+  labs(title="Aug weekly arrests minus July weekly arrests")
+
+p3
+
 ```
