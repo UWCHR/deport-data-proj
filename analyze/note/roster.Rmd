@@ -25,7 +25,7 @@ p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, r
 
 ```{r setup_encounters, message=FALSE, warning=FALSE, include=TRUE}
 
-file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Encounters.xlsx"
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Encounters_LESA-STU_FINAL_Redacted_raw.xlsx"
 
 encounter_df_1 <- read_excel(here('analyze', 'input', file), sheet=1, skip=6) %>%
   janitor::clean_names() %>%
@@ -46,7 +46,7 @@ encounter_ids <- unique(encounter_df$unique_identifier)
 
 ```{r setup_detainers}
 
-file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Detainers.xlsx"
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Detainers_LESA-STU_FINAL_Redacted_raw.xlsx"
 
 detainer_df<- read_excel(here('analyze', 'input', file), skip=6) %>% 
   janitor::clean_names()
@@ -60,7 +60,7 @@ detainer_ids <- unique(detainer_df$unique_identifier)
 
 ```{r setup_arrests, message=FALSE, warning=FALSE, include=TRUE}
 
-file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests.xlsx"
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests_LESA-STU_FINAL_Redacted_raw.xlsx"
 
 arrest_df<- read_excel(here('analyze', 'input', file), skip=6) %>% 
   janitor::clean_names()
@@ -78,7 +78,7 @@ arrest_ids <- unique(arrest_df$unique_identifier)
 
 ```{r setup_detention, message=FALSE, warning=FALSE, include=TRUE}
 
-file <- "ice_detentions_nov23-jun25.csv.gz"
+file <- "ice_detentions_nov23-jul25.csv.gz"
 
 detention_df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
   mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
@@ -101,12 +101,12 @@ detention_ids <- unique(detention_df$unique_identifier)
 
 ```{r setup_removals, message=FALSE, warning=FALSE, include=TRUE}
 
-file <- "2025-ICLI-00019_2024-ICFO-39357_ICE_Removals_2025.xlsx"
-
-removal_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
-  janitor::clean_names() %>% filter(!is.na(unique_identifier))
-
-removal_ids <- unique(removal_df$unique_identifier)
+# file <- "2025-ICLI-00019_2024-ICFO-39357_ICE_Removals_2025.xlsx"
+# 
+# removal_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
+#   janitor::clean_names() %>% filter(!is.na(unique_identifier))
+# 
+# removal_ids <- unique(removal_df$unique_identifier)
 
 ```
 
@@ -121,7 +121,8 @@ detention_df <- detention_df %>%
          id_in_encounters = unique_identifier %in% encounter_ids,
          id_in_detainers = unique_identifier %in% detainer_ids,
          id_in_arrests = unique_identifier %in% arrest_ids,
-         id_in_removals = unique_identifier %in% removal_ids)
+         # id_in_removals = unique_identifier %in% removal_ids
+         )
 
 
 
