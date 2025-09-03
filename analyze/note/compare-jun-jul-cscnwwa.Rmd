@@ -153,6 +153,15 @@ geo_track_jun_ids <- geo_track_jun_ids[!is.na(geo_track_jun_ids)]
 
 stopifnot(length(unique(geo_track_jun_ids)) == length(geo_track_jun_ids))
 
+geo_track_roster_gender <- jun_detention_df %>% 
+  filter(unique_identifier %in% unlist(geo_track_jun_ids)) %>% 
+  dplyr::select(unique_identifier, gender, birth_year) %>% 
+  distinct()
+
+geo_track_roster <- geo_track_roster %>% 
+  left_join(geo_track_roster_gender, by=c("unique_identifier_jun" = "unique_identifier"))
+
+write_delim(geo_track_roster, here::here('analyze', 'output', 'geo_track_rosters_2025_jan-feb.csv'), delim=',')
 ```
 
 ```{r}
