@@ -66,7 +66,7 @@ p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, r
 
 ```{r setup_arrests, message=FALSE, warning=FALSE, include=TRUE}
 
-file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests.xlsx"
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests_LESA-STU_FINAL_Redacted_raw.xlsx"
 
 arrest_df<- read_excel(here('analyze', 'input', file), skip=6) %>% 
   janitor::clean_names()
@@ -93,7 +93,7 @@ wa_arrests <- arrest_df %>%
 
 ```{r setup_detention, message=FALSE, warning=FALSE, include=TRUE}
 
-file <- "ice_detentions_nov23-jun25.csv.gz"
+file <- "ice_detentions_nov23-jul25.csv.gz"
 
 detention_df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
   mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
@@ -167,7 +167,7 @@ wa_detentions <- detention_df %>%
 
 ```{r setup_removals, message=FALSE, warning=FALSE, include=TRUE}
 
-file <- "2025-ICLI-00019_2024-ICFO-39357_ICE_Removals_2025.xlsx"
+file <- "2025-ICLI-00019_2024-ICFO-39357_ICE_Removals07312025.xlsx"
 
 removal_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
   janitor::clean_names() %>% filter(!is.na(unique_identifier))
@@ -544,6 +544,66 @@ cecot_flight_arr_histories <- arrest_df %>%
 cecot_flight_arr_histories %>% 
   count(apprehension_aor) %>% 
   arrange(desc(n))
+
+```
+
+## Salvadorans
+
+```{r rem_sv}
+
+rem_sv <- removal_df %>% 
+  filter(citizenship_country == "EL SALVADOR") %>% 
+  mutate(week = floor_date(departed_date, "week", week_start = "Monday"))
+
+tab1 <- rem_sv %>% 
+  count(citizenship_country, departure_country)
+
+write_delim(tab1, here::here('analyze', 'output', 'removals-salvadorans-departed-country.csv'))
+
+dat <- rem_sv %>% 
+  count(week, departure_country)
+
+write_delim(dat, here::here('analyze', 'output', 'weekly-removals-salvadorans-departed_country.csv'))
+
+p1 <- dat %>% 
+  ggplot(aes(x = week, y = n, fill = departure_country)) +
+  geom_col() +
+  gghighlight(departure_country %in% c("EL SALVADOR", "MEXICO")) +
+  labs(title = "Weekly total removals of Salvadorans by departure country",
+       subtitle = "El Salvador, Mexico highlighted", 
+       caption = "Source: ICE FOIA 2025-ICLI-00019_2024-ICFO-39357")
+  
+
+p1
+
+
+```
+
+```{r rem_to_sv}
+
+rem_to_sv <- removal_df %>% 
+  filter(departure_country == "EL SALVADOR") %>% 
+  mutate(week = floor_date(departed_date, "week", week_start = "Monday"))
+
+tab2 <- rem_to_sv %>% 
+  count(citizenship_country, departure_country)
+
+write_delim(tab1, here::here('analyze', 'output', 'removals-to-el-salvador-by-citizenship.csv'))
+
+dat2 <- rem_to_sv %>% 
+  count(week, citizenship_country)
+
+write_delim(dat2, here::here('analyze', 'output', 'weekly-removals-to-el-salvador-by-citizenship.csv'))
+
+p2 <- dat2 %>% 
+  ggplot(aes(x = week, y = n, fill = citizenship_country)) +
+  geom_col() +
+  gghighlight(citizenship_country %in% c("EL SALVADOR", "VENEZUELA", "GUATEMALA", "HONDURAS", "NICARAGUA", "COLOMBIA"))+
+  labs(title = "Weekly total removals to El Salvador by citizenship country",
+       subtitle = "Select nationalities highlighted", 
+       caption = "Source: ICE FOIA 2025-ICLI-00019_2024-ICFO-39357")
+  
+p2
 
 ```
 

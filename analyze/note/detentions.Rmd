@@ -20,7 +20,7 @@ library(pacman)
 
 p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, digest, ggsankeyfier)
 
-file <- "ice_detentions_nov23-jun25.csv.gz"
+file <- "ice_detentions_nov23-jul25.csv.gz"
 
 df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
   janitor::clean_names() %>% 
@@ -143,6 +143,25 @@ df <- df %>%
           detention_facility_aor == "WAS" ~ "Interior/Northern"))
 
 ```
+
+```{r trac_facil}
+
+trac_facil <- read_delim(here::here('analyze', 'input', 'trac_foia_24-05655_facils.csv'), delim='|')
+
+df <- df %>% 
+  mutate(trac_facil = detention_facility_code %in% unique(trac_facil$detention_facility_code))
+
+# Most detention records involve known facilities (TRAC FOIA)
+sum(df$trac_facil) / nrow(df)
+
+# Why are these facilities not represented in TRAC data?
+unknown_facil <- unique(df[df$trac_facil == FALSE, c("detention_facility_code", "detention_facility")]) %>% 
+  arrange(detention_facility)
+
+write_delim(unknown_facil, "ddp_facil_not_in_trac.csv", delim=',')
+
+```
+
 
 ```{r bookins_by_aor_state}
 
@@ -819,7 +838,7 @@ timeline <- seq(timeline_start, timeline_end, by='day')
 # given `date` by a given grouping variable `var`
 headcounter_24hr <- function(date, df, group_vars) {
   
-  in_range <- df[date(df$book_in_date_time) <= date(date) & date(df$detention_book_out_date_time_min) > date(date),]
+  in_range <- df[date(df$book_in_date_time) <= date(date) & date(df$detention_book_out_date_time_min) >= date(date),]
   
   in_range %>% 
     group_by(across(all_of(group_vars))) %>% 
@@ -846,7 +865,7 @@ cscnwwa_24_hr <- map_dfr(cscnwwa_24_hr, bind_rows)
 
 ```
 
-Is this right? Why would 24-hr inclusive headcount ever be lower than midnight headcount? Double check logics here and in headcount script. What happens in case of duplicate book-in/out?
+Improved 24 hour inclusive headcount looks correct (always higher than snapshot headcount):
 
 ```{r compare_headcounts}
 
@@ -876,76 +895,70 @@ p2
 
 ```
 
-```{r geotrack}
 
-geotrack <- read_delim(here::here('analyze', 'hand', 'cscnwwa_geo_track.csv'), delim='|') %>% 
-  mutate(detention_facility_code = "CSCNWWA")
 
-cscnwwa_2025 <- cscnwwa %>% 
-  mutate(type = "headcount") %>% 
-  filter(date >= "2025-01-01")
+```{r select_facil_placement_length}
 
-dat <- rbind(cscnwwa_2025, geotrack)
+select_facil <- c("FDLHOLD", "SEAHOLD", "YAKHOLD")
 
-dat_wide <- dat %>% 
-  pivot_wider(id_cols = "date", names_from="type", values_from="n") %>% 
-  mutate(diff = geo_track - headcount,
-         week = week(date),
-         wday = wday(date))
+dat <- df %>%
+  filter(detention_facility_code %in% select_facil)
 
 p1 <- dat %>% 
-  ggplot(aes(x=date, y = n, color = type)) +
-  geom_line()
+  ggplot(aes(y = detention_facility_code, x = placement_length)) +
+  geom_boxplot() +
+  geom_vline(xintercept=3, color = "red")
 
 p1
 
-p2 <- dat_wide %>% 
-  ggplot(aes(x = date , y=diff)) +
-  geom_line()
+over_3 <- dat %>% 
+  filter(placement_length >= 3)
 
-p2
-
-p3 <- dat_wide %>% 
-  filter(date < "2025-03-01") %>% 
-  ggplot(aes(x = wday , y=diff, color = week)) +
-  geom_line(aes(group = week))
-
-p3
+write_delim(over_3, here::here("analyze", "output", "hold_over_3.csv"), delim=',')
 
 ```
 
-```{r arrivals_departures}
+Snapshot headcounts miss many people detained less than 24 hours at holding rooms:
 
-cscnwwa_departures <- df %>% 
-  filter(detention_facility_code == "CSCNWWA",
-         detention_book_out_date_time >= as.Date("2025-01-01"),
-         detention_book_out_date_time <= as.Date("2025-02-28")) %>% 
-  mutate(date = as.Date(detention_book_out_date_time),
-         type = "departures")
+```{r select_facil_headcount}
 
-dat_1 <- cscnwwa_departures %>% 
-  distinct(unique_identifier, .keep_all="TRUE") %>% 
-  count(date, type)
+dat <- headcount_df %>% 
+  filter(detention_facility_code %in% select_facil)
 
-cscnwwa_arrivals <- df %>% 
-  filter(detention_facility_code == "CSCNWWA",
-         book_in_date_time >= as.Date("2025-01-01"),
-         book_in_date_time <= as.Date("2025-02-28")) %>% 
-  mutate(date = as.Date(book_in_date_time), 
-         type = "arrivals")
+p1 <- dat %>% 
+  filter(date >= "2025-01-01") %>% 
+  ggplot(aes(x = date, y = n, fill = detention_facility_code)) +
+  geom_col(position="dodge") +
+  facet_wrap(~detention_facility_code)
 
-dat_2 <- cscnwwa_arrivals %>% 
-  distinct(unique_identifier, .keep_all="TRUE") %>% 
-  count(date, type)
+p1
 
-dat <- rbind(dat_1, dat_2)
+```
 
-dat_wide_2 <- dat %>% 
-  pivot_wider(id_cols = "date", names_from="type", values_from="n") %>% 
-  arrange(date)
+```{r select_facil_24_hr_headcount}
 
-dat_wide <- left_join(dat_wide, dat_wide_2, by = 'date')
+# Generate limited sample dataset
+temp_df <- df %>%
+  filter(detention_facility_code %in% select_facil)
 
-write_delim(dat_wide, here::here('analyze', 'output', 'cscnwwa_ice_vs_geo_track.csv'), na='', delim='|')
+# Apply function to timeline
+headcount_24_hr <- lapply(timeline, headcounter_24hr, df=temp_df, group_vars=c('detention_facility_code'))
+
+
+# Transform output into data frame
+headcount_24_hr <- map_dfr(headcount_24_hr, bind_rows)
+
+p1 <- headcount_24_hr %>% 
+  filter(date >= "2025-01-01") %>% 
+  ggplot(aes(x = date, y = n, fill = detention_facility_code)) +
+  geom_col(position="dodge") +
+  facet_wrap(~detention_facility_code)
+
+p1 + labs(title = "Daily population (24-hour inclusive)")
+
+tab1 <- headcount_24_hr %>% 
+  group_by(detention_facility_code) %>% 
+  summarize(med_pop = median(n),
+            avg_pop = mean(n))
 
 ```

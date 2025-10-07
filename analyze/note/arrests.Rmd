@@ -11,6 +11,8 @@ output:
         code_folding: hide
 ---
 
+This notebook analyzes ICE administrative arrest data obtained via FOIA by the [Deportation Data Project](https://deportationdata.org/), with a focus on ICE's Seattle Area of Responsibility.
+
 ```{r setup, message=FALSE, warning=FALSE, include=TRUE}
 
 options(scipen = 1000000)
@@ -20,12 +22,6 @@ library(pacman)
 p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl)
 
 general_caption <- "Data: ICE administrative arrests obtained by Deportation Data Project\nAnalysis: University of Washington Center for Human Rights"
-
-```
-
-This notebook analyzes ICE administrative arrest data obtained via FOIA by the [Deportation Data Project](https://deportationdata.org/), with a focus on ICE's Seattle Area of Responsibility.
-
-```{r load_arrests, message=FALSE, warning=FALSE, include=TRUE}
 
 file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests_LESA-STU_FINAL_Redacted_raw.xlsx"
 
@@ -42,6 +38,22 @@ arrest_df <- read_excel(here('analyze', 'input', file), skip=6) %>%
 ```
 
 National arrest trend.
+
+```{r}
+
+tab2 <- arrest_df %>% 
+  filter(apprehension_date >= "2021-10-01") %>% 
+  mutate(month = floor_date(apprehension_date, unit="months")) %>% 
+  count(month, apprehension_aor)
+
+tab2 <- tab2 %>% 
+  arrange(apprehension_aor, month) %>% 
+  mutate(source = "DDP")
+
+write_delim(tab2, here::here('analyze', 'output', 'arrests-month-aor.csv'))
+
+```
+
 
 ```{r natl_trend}
 
