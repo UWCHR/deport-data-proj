@@ -527,9 +527,11 @@ df <- df %>%
                      TRUE ~ detention_book_out_date_time))
 
 # Define timeline for calculation of daily detained population
-timeline_start <- min(df$stay_book_in_date_time, na.rm=TRUE)
-timeline_end <- max(df$stay_book_out_date_time, na.rm=TRUE)
-timeline <- seq(timeline_start, timeline_end, by='day')
+timeline_start <- min(as.Date(df$book_in_date_time), na.rm=TRUE)
+timeline_end <- max(as.Date(df$detention_book_out_date_time), na.rm=TRUE)
+timeline_start_midnight <- as.POSIXct(paste(timeline_start, "00:00:00"), tz = "UTC") 
+timeline_end_midnight <- as.POSIXct(paste(timeline_end, "00:00:00"), tz = "UTC") 
+timeline <- seq(timeline_start_midnight, timeline_end_midnight, by='day')
 
 # Function counts all in-range detention placement records in dataset `df` for a
 # given `date` by a given grouping variable `var`
