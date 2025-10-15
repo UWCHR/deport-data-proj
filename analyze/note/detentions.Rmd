@@ -51,6 +51,23 @@ sum(is.na(df$unique_identifier))
 
 ```
 
+```{r dupe_placements}
+
+cols <- c('unique_identifier', 'book_in_date_time', 'detention_book_out_date_time', 'detention_facility_code')
+
+preclean <- nrow(df)
+
+df_clean <- df %>% 
+  distinct(., unique_identifier, book_in_date_time, detention_book_out_date_time, detention_facility_code, .keep_all = TRUE)
+
+postclean <- nrow(df_clean)
+
+dropped <- (preclean - postclean )
+
+(preclean - postclean )/ nrow(df_clean) * 100
+
+```
+
 ```{r initial_placement_check}
 
 sum(df$initial_placement_exact)

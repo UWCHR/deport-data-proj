@@ -42,8 +42,7 @@ stopifnot(names_1 == names_2)
 df <- rbind(df1, df2)
 
 predrop <- nrow(df)
-df <- df |>
-	distinct(.keep_all = TRUE)
+df <- unique(df)
 postdrop <- nrow(df)
 
 log_info("Duplicates dropped: {predrop - postdrop}")
