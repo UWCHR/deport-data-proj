@@ -12,10 +12,10 @@ p_load(argparse, logger, tidyverse, arrow, lubridate, zoo, digest)
 options(dplyr.summarise.inform = FALSE)
 
 parser <- ArgumentParser()
-parser$add_argument("--input", default = "detain-headcount/input/ice_detentions_nov23-feb25.csv.gz")
+parser$add_argument("--input", default = "input/ice_detentions_nov23-jul25.csv.gz")
 parser$add_argument("--group", default = "detention_facility_code")
-parser$add_argument("--log", default = "detain-headcount/output/headcount.R.log")
-parser$add_argument("--output", default = "detain-headcount/output/headcount_nov23-feb25.csv.gz")
+parser$add_argument("--log", default = "output/headcount.R.log")
+parser$add_argument("--output", default = "output/headcount_nov23-jul25.csv.gz")
 args <- parser$parse_args()
 
 # append log file
@@ -38,7 +38,9 @@ log_info("Total rows in: {nrow(df)}")
 
 timeline_start <- min(as.Date(df$book_in_date_time), na.rm=TRUE)
 timeline_end <- max(as.Date(df$detention_book_out_date_time), na.rm=TRUE)
-timeline <- seq(timeline_start, timeline_end, by='day')
+timeline_start_midnight <- as.POSIXct(paste(timeline_start, "00:00:00"), tz = "UTC") 
+timeline_end_midnight <- as.POSIXct(paste(timeline_end, "00:00:00"), tz = "UTC") 
+timeline <- seq(timeline_start_midnight, timeline_end_midnight, by='day')
 
 group_vars <- unlist(str_split(args$group, ", "))
 
