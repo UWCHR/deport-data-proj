@@ -901,7 +901,7 @@ p2
 
 ```{r select_facil_placement_length}
 
-select_facil <- c("FDLHOLD", "SEAHOLD", "YAKHOLD")
+select_facil <- c("FDLHOLD", "SEAHOLD", "YAKHOLD", "POOHOLD", "EUGHOLD", "MEDHOLD")
 
 dat <- df %>%
   filter(detention_facility_code %in% select_facil)
@@ -941,7 +941,7 @@ p1
 
 # Generate limited sample dataset
 temp_df <- df %>%
-  filter(detention_facility_code %in% select_facil)
+  filter(str_detect(detention_facility_code, "HOLD"))
 
 # Apply function to timeline
 headcount_24_hr <- lapply(timeline, headcounter_24hr, df=temp_df, group_vars=c('detention_facility_code'))
@@ -950,17 +950,104 @@ headcount_24_hr <- lapply(timeline, headcounter_24hr, df=temp_df, group_vars=c('
 # Transform output into data frame
 headcount_24_hr <- map_dfr(headcount_24_hr, bind_rows)
 
+write_delim(headcount_24_hr, here::here("analyze/output/holdroom_headcount_24_hr.csv"), delim=',')
+
+```
+
+```{r plot_hold}
+
 p1 <- headcount_24_hr %>% 
-  filter(date >= "2025-01-01") %>% 
+  filter(detention_facility_code %in% select_facil,
+         date >= "2025-01-01") %>% 
   ggplot(aes(x = date, y = n, fill = detention_facility_code)) +
   geom_col(position="dodge") +
   facet_wrap(~detention_facility_code)
 
 p1 + labs(title = "Daily population (24-hour inclusive)")
 
+```
+
+```{r avg_pop}
+
 tab1 <- headcount_24_hr %>% 
+  filter(detention_facility_code %in% select_facil) %>% 
   group_by(detention_facility_code) %>% 
   summarize(med_pop = median(n),
             avg_pop = mean(n))
+
+tab2 <- headcount_24_hr %>% 
+  filter(detention_facility_code %in% select_facil) %>% 
+  mutate(week = floor_date(date, "week", week_start = "Monday")) %>%
+  group_by(detention_facility_code, week) %>% 
+  summarize(weekly_med_pop = median(n),
+            weekly_avg_pop = mean(n)) %>% 
+  ungroup()
+
+p2 <- tab2 %>% 
+  ggplot(aes(x = week, y = weekly_avg_pop, color = detention_facility_code)) +
+  geom_line() +
+  gghighlight(detention_facility_code == "POOHOLD",
+              use_direct_label = FALSE) +
+  labs(title="Weekly ADP, Portland ICE Hold Room",
+       subtitle="Compared to other regional hold rooms")
+
+p2
+
+tab3 <- headcount_24_hr %>% 
+  filter(detention_facility_code %in% select_facil) %>% 
+  mutate(month = as.yearmon(date)) %>%
+  group_by(detention_facility_code, month) %>% 
+  summarize(monthly_med_pop = median(n),
+            monthly_avg_pop = mean(n)) %>% 
+  ungroup()
+
+p3 <- tab3 %>% 
+  ggplot(aes(x = month, y = monthly_avg_pop, color = detention_facility_code)) +
+  geom_line() +
+  gghighlight(detention_facility_code == "POOHOLD",
+              use_direct_label = FALSE) +
+  labs(title="Monthly ADP, Portland ICE Hold Room",
+       subtitle="Compared to other regional hold rooms")
+
+p3
+
+write_delim(tab2, here::here("analyze/output/pnw_holdroom_weekly_adp.csv"), delim=',')
+
+write_delim(tab3, here::here("analyze/output/pnw_holdroom_monthly_adp.csv"), delim=',')
+
+```
+
+```{r}
+
+dat <- df %>%
+  filter(detention_facility_code %in% select_facil) %>% 
+  mutate(month = as.yearmon(book_in_date_time)) %>%
+  count(month, detention_facility_code)
+
+p1 <- dat %>% 
+  ggplot(aes(x = month, y = n, color = detention_facility_code)) +
+  geom_line() +
+  labs(title = "Monthly book-ins",
+      subtitle = "Select OR + WA hold rooms ")
+
+p1
+
+write_delim(dat, here::here("analyze/output/pnw_holdroom_monthly_bookins.csv"), delim=',')
+
+
+dat <- df %>%
+  filter(detention_facility_code %in% select_facil) %>% 
+  mutate(week = floor_date(book_in_date_time, "week", week_start = "Monday")) %>%
+  count(week, detention_facility_code)
+
+p2 <- dat %>% 
+  ggplot(aes(x = week, y = n, color = detention_facility_code)) +
+  geom_line() +
+    labs(title = "Weekly book-ins",
+      subtitle = "Select OR + WA hold rooms ")
+
+p2
+
+write_delim(dat, here::here("analyze/output/pnw_holdroom_weekly_bookins.csv"), delim=',')
 
 ```
