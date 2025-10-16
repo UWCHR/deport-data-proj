@@ -51,6 +51,23 @@ sum(is.na(df$unique_identifier))
 
 ```
 
+```{r dupe_placements}
+
+cols <- c('unique_identifier', 'book_in_date_time', 'detention_book_out_date_time', 'detention_facility_code')
+
+preclean <- nrow(df)
+
+df_clean <- df %>% 
+  distinct(., unique_identifier, book_in_date_time, detention_book_out_date_time, detention_facility_code, .keep_all = TRUE)
+
+postclean <- nrow(df_clean)
+
+dropped <- (preclean - postclean )
+
+(preclean - postclean )/ nrow(df_clean) * 100
+
+```
+
 ```{r initial_placement_check}
 
 sum(df$initial_placement_exact)
@@ -146,19 +163,19 @@ df <- df %>%
 
 ```{r trac_facil}
 
-trac_facil <- read_delim(here::here('analyze', 'input', 'trac_foia_24-05655_facils.csv'), delim='|')
-
-df <- df %>% 
-  mutate(trac_facil = detention_facility_code %in% unique(trac_facil$detention_facility_code))
-
-# Most detention records involve known facilities (TRAC FOIA)
-sum(df$trac_facil) / nrow(df)
-
-# Why are these facilities not represented in TRAC data?
-unknown_facil <- unique(df[df$trac_facil == FALSE, c("detention_facility_code", "detention_facility")]) %>% 
-  arrange(detention_facility)
-
-write_delim(unknown_facil, "ddp_facil_not_in_trac.csv", delim=',')
+# trac_facil <- read_delim(here::here('analyze', 'input', 'trac_foia_24-05655_facils.csv'), delim='|')
+# 
+# df <- df %>% 
+#   mutate(trac_facil = detention_facility_code %in% unique(trac_facil$detention_facility_code))
+# 
+# # Most detention records involve known facilities (TRAC FOIA)
+# sum(df$trac_facil) / nrow(df)
+# 
+# # Why are these facilities not represented in TRAC data?
+# unknown_facil <- unique(df[df$trac_facil == FALSE, c("detention_facility_code", "detention_facility")]) %>% 
+#   arrange(detention_facility)
+# 
+# write_delim(unknown_facil, "ddp_facil_not_in_trac.csv", delim=',')
 
 ```
 
