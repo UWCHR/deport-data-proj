@@ -1,0 +1,76 @@
+---
+title: "ICE ERO-LESA detention data Nov. 2023-Feb. 2025"
+author: "UWCHR"
+date: "2025-03-25"
+output:
+    html_document:
+        html_preview: true
+        toc: true
+        toc_depth: 3
+        toc_float: true
+        code_folding: hide
+---
+
+
+```{r setup, message=FALSE, warning=FALSE, include=TRUE}
+
+options(scipen = 1000000)
+
+library(pacman)
+
+p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, digest, ggsankeyfier)
+
+file <- "ice_detentions_nov23-jul25.csv.gz"
+
+df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
+  janitor::clean_names() %>% 
+  mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
+         book_in_date_time = ymd_hms(book_in_date_time),
+         detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
+         stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
+         )
+
+```
+
+```{r dupe_placements}
+
+cols <- c('unique_identifier', 'book_in_date_time', 'detention_book_out_date_time', 'detention_facility_code')
+
+preclean_ids <- unique(df$unique_identifier)
+preclean <- nrow(df)
+
+df_clean <- df %>% 
+  distinct(., unique_identifier, book_in_date_time, detention_book_out_date_time, detention_facility_code, .keep_all = TRUE)
+
+postclean <- nrow(df_clean)
+postclean_ids <- unique(df$unique_identifier)
+
+# Fails if we lose any unique identifiers in cleaning
+stopifnot(preclean_ids == postclean_ids)
+
+dropped <- (preclean - postclean )
+
+(preclean - postclean )/ nrow(df_clean) * 100
+
+```
+
+```{r unique_id_headcount}
+
+# How many overlaps would we have after dropping dupes as above?
+
+id_headcount <- read_delim(here::here("detain-headcount", "output", "headcount_unique_id.csv.gz"), delim="|")
+
+dat <- id_headcount %>% 
+  group_by(unique_identifier) %>% 
+  summarize(n = max(n))
+
+hist(dat$n)
+
+```
+
+```{r}
+
+id_headcount_gt_1 <- id_headcount %>% 
+  filter(n > 1)
+
+```

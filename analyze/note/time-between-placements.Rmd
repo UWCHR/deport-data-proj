@@ -1,0 +1,118 @@
+---
+title: "ICE ERO-LESA detention data Nov. 2023-Feb. 2025"
+author: "UWCHR"
+date: "2025-03-25"
+output:
+    html_document:
+        html_preview: true
+        toc: true
+        toc_depth: 3
+        toc_float: true
+        code_folding: hide
+---
+
+
+```{r setup, message=FALSE, warning=FALSE, include=TRUE}
+
+options(scipen = 1000000)
+
+library(pacman)
+
+p_load(here, tidyverse, data.table, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, digest, ggsankeyfier)
+
+file <- "ice_detentions_nov23-jul25.csv.gz"
+
+df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
+  janitor::clean_names() %>% 
+  mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
+         book_in_date_time = ymd_hms(book_in_date_time),
+         detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
+         stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
+         )
+
+```
+
+```{r dupe_placements}
+
+cols <- c('unique_identifier', 'book_in_date_time', 'detention_book_out_date_time', 'detention_facility_code')
+
+preclean <- nrow(df)
+
+df <- df %>% 
+  distinct(., unique_identifier, book_in_date_time, detention_book_out_date_time, detention_facility_code, .keep_all = TRUE)
+
+postclean <- nrow(df)
+
+dropped <- (preclean - postclean )
+
+```
+
+```{r calc_time_between_placements}
+
+# Incorporate in `detain-unique-stays`?
+
+df <- df %>% 
+  arrange(unique_identifier, stayid, stay_book_in_date_time, book_in_date_time)
+
+setDT(df)
+
+df[, time_between_placements := book_in_date_time - shift(detention_book_out_date_time, 1, type = "lag"), by = stayid]
+
+```
+
+```{r analyze_time_between_placements}
+
+df <- df %>% 
+  mutate(time_between_placements = as.numeric(time_between_placements, units = "days"))
+
+hist(df$time_between_placements)
+
+# This only considers positive time_between_placement values because logged
+hist(unlist(log(df[!is.na(df$time_between_placements), "time_between_placements"])))
+
+dat <- df %>% 
+  filter(book_in_date_time >= "2023-11-01") %>% 
+  mutate(book_in_year_mon = as.yearmon(book_in_date_time)) %>% 
+  group_by(book_in_year_mon) %>% 
+  summarize(avg_time_between_placements = mean(time_between_placements, na.rm=TRUE))
+
+p1 <- dat %>% 
+  ggplot(aes(x = book_in_year_mon, y = avg_time_between_placements)) +
+  geom_line()
+
+p1
+
+b1 <- df %>% 
+  filter(book_in_date_time >= "2025-01-01",
+         !is.na(time_between_placements)) %>% 
+  mutate(book_in_year_mon = as.yearmon(book_in_date_time)) %>% 
+  ggplot(aes(x = as.factor(book_in_year_mon), y = time_between_placements)) +
+  geom_boxplot()
+
+b1
+
+```
+
+```{r}
+
+dat <- df %>% 
+  filter(time_between_placements >= 1)
+
+dat %>% 
+  count(detention_facility, prev_facil) %>% 
+  arrange(desc(n))
+
+dat %>% 
+  filter(prev_facil == "CSCNWWA") %>% 
+  count(detention_facility_code) %>% 
+  arrange(desc(n))
+
+dat %>% 
+  filter(detention_facility_code == "CSCNWWA") %>% 
+  count(prev_facil) %>% 
+  arrange(desc(n))
+
+temp <- dat %>% 
+  filter(detention_facility_code == "CSCNWWA",
+         prev_facil == "SEAHOLD")
+```
