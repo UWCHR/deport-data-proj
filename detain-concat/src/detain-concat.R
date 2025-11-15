@@ -41,11 +41,15 @@ stopifnot(names_1 == names_2)
 
 df <- rbind(df1, df2)
 
+log_info("Rows in: {nrow(df)}")
+
 predrop <- nrow(df)
 df <- unique(df)
 postdrop <- nrow(df)
 
 log_info("Duplicates dropped: {predrop - postdrop}")
+
+log_info("Rows out: {nrow(df)}")
 
 write_delim(df, args$output, delim='|')
 
