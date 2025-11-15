@@ -42,8 +42,7 @@ df <- df %>% rowwise() %>%
          stayid = vdigest(stayCols)) %>%
   select(-c(allCols, stayCols))
 
-# This should be better
-max_date <- as.Date("2025-06-11")
+max_date <- as.POSIXct("2025-07-28 23:59:59", tz = "UTC")
 
 df <- df %>% 
   filter(!is.na(stay_book_in_date_time),
