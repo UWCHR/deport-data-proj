@@ -50,7 +50,8 @@ df <- df %>%
   left_join(to_join, by="detention_facility_code")
 
 df <- df %>% 
-  mutate(detention_facility_region = case_when(detention_facility_aor == "ATL" ~ "Interior/Northern",
+  mutate(detention_facility_region = case_when(
+          detention_facility_aor == "ATL" ~ "Interior/Northern",
           detention_facility_aor == "BAL" ~ "Interior/Northern",
           detention_facility_aor == "BOS" ~ "Interior/Northern",
           detention_facility_aor == "BUF" ~ "Interior/Northern",
@@ -262,8 +263,7 @@ p2
 old_headcount_cscnwwa <- old_headcount %>% 
   mutate(dataset = "UWCHR") %>% 
   filter(date >= "2011-11-01",
-         detention_facility_code == "CSCNWWA"
-         )
+         detention_facility_code == "CSCNWWA")
 
 new_headcount_cscnwwa <- df %>% 
   filter(date >= "2023-11-15",
@@ -325,10 +325,10 @@ dat_wide <- dat %>%
   mutate(diff = `release_2025-12` - `release_2025-08`)
 
 p3 <- dat_wide %>% 
-  filter(date >= "2023-11-01") %>% 
+  filter(!is.na(`release_2025-08`)) %>%
   ggplot(aes(x = date, y = diff)) +
   geom_line() +
-  ylim(0, NA) +
+  # ylim(0, NA) +
   labs(title="New headcount minus old headcount")
 
 p3
@@ -350,11 +350,28 @@ p1 <- dat %>%
 p1
 
 ```
+Major new facilities below:
+
+From FY2026 detention stats:
+ERO EL PASO CAMP EAST MONTANA	EROFCB
+FLORIDA SOFT-SIDED FACILITY-SOUTH	FLDSSFS
+CAL CITY ICE PROCESSING CENTER	CACTYCA
+FOLKSTON D RAY ICE PROCESSING CTR	FIPCDGA
+LOUISIANA ICE PROCESSING CENTER	LICEPLA
+
+Unknown:
+FLBAKCI
+
 
 ```{r}
 
+aug_facil <- unique(df_old$detention_facility_code)
+dec_facil <- unique(df$detention_facility_code)
+
+new_facil <- setdiff(dec_facil, aug_facil)
+
 dat <- df %>% 
-  filter(detention_facility_code %in% new_facils)
+  filter(detention_facility_code %in% new_facil)
 
 p1 <- dat %>% 
   ggplot(aes(x = date, y = n, color = detention_facility_code)) +

@@ -110,7 +110,9 @@ headcounter_24hr <- function(date, df, group_vars) {
 
 ```{r select_facil_placement_length}
 
-select_facil <- c("FDLHOLD", "SEAHOLD", "YAKHOLD", "POOHOLD", "EUGHOLD", "MEDHOLD")
+# select_facil <- c("FDLHOLD", "SEAHOLD", "YAKHOLD", "POOHOLD", "EUGHOLD", "MEDHOLD")
+
+select_facil <- c("HAVMCWA", "STJMCWA", "TACGHWA")
 
 dat <- df %>%
   filter(detention_facility_code %in% select_facil)
@@ -147,6 +149,47 @@ p1
 ```
 
 ```{r select_facil_24_hr_headcount}
+
+# Generate limited sample dataset
+temp_df <- df %>%
+  filter(detention_facility_code %in% select_facil)
+
+# Apply function to timeline
+headcount_24_hr <- lapply(timeline, headcounter_24hr, df=temp_df, group_vars=c('detention_facility_code'))
+
+
+# Transform output into data frame
+headcount_24_hr <- map_dfr(headcount_24_hr, bind_rows)
+
+```
+
+```{r select_facil_headcount}
+
+dat <- headcount_24_hr %>% 
+  filter(detention_facility_code %in% select_facil)
+
+p1 <- dat %>% 
+  # filter(date >= "2025-01-01") %>% 
+  ggplot(aes(x = date, y = n, fill = detention_facility_code)) +
+  geom_col(position="dodge") +
+  facet_wrap(~detention_facility_code)
+
+p1
+
+p2 <- dat %>% 
+  filter(
+    # date >= "2025-01-01",
+         detention_facility_code == "STJMCWA") %>%
+  ggplot(aes(x = date, y = n, fill = detention_facility_code)) +
+  geom_col(position="dodge") +
+  facet_wrap(~detention_facility_code)
+
+p2
+
+```
+
+
+```{r all_hold_room_24_hr_headcount}
 
 # Generate limited sample dataset
 temp_df <- df %>%

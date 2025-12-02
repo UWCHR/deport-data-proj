@@ -51,3 +51,101 @@ aug_facils <- unique(old_df$detention_facility_code)
 new_facils <- setdiff(dec_facils, aug_facils)
 
 ```
+
+```{r book_ins}
+
+new_dat <- new_df %>% 
+  mutate(week = floor_date(book_in_date_time, unit="week", week_start=1)) %>% 
+  count(week) %>% 
+  mutate(release = "Dec")
+
+old_dat <- old_df %>% 
+  mutate(week = floor_date(book_in_date_time, unit="week", week_start=1)) %>% 
+  count(week) %>% 
+  mutate(release = "Aug")
+
+dat <- rbind(new_dat, old_dat)
+
+p1 <- dat %>% 
+  ggplot(aes(x = week, y = n, color = release)) +
+  geom_line()
+
+p1
+
+dat_wide <- dat %>% 
+  pivot_wider(id_cols = week, names_from = release, values_from = n) %>% 
+  mutate(diff = Dec - Aug)
+
+p2 <- dat_wide %>% 
+  ggplot(aes(x = week, y = diff)) +
+  geom_line()
+
+p2
+
+```
+
+```{r book_outs}
+
+new_dat <- new_df %>% 
+  mutate(week = floor_date(detention_book_out_date_time, unit="week", week_start=1)) %>% 
+  count(week) %>% 
+  mutate(release = "Dec")
+
+old_dat <- old_df %>% 
+  mutate(week = floor_date(detention_book_out_date_time, unit="week", week_start=1)) %>% 
+  count(week) %>% 
+  mutate(release = "Aug")
+
+dat <- rbind(new_dat, old_dat)
+
+p1 <- dat %>% 
+  ggplot(aes(x = week, y = n, color = release)) +
+  geom_line()
+
+p1
+
+dat_wide <- dat %>% 
+  pivot_wider(id_cols = week, names_from = release, values_from = n) %>% 
+  mutate(diff = Dec - Aug)
+
+p2 <- dat_wide %>% 
+  ggplot(aes(x = week, y = diff)) +
+  geom_line()
+
+p2
+
+```
+
+```{r stays}
+
+new_dat <- new_df %>% 
+  distinct(stayid, .keep_all=TRUE) %>% 
+  mutate(week = floor_date(stay_book_in_date_time, unit="week", week_start=1)) %>% 
+  count(week) %>% 
+  mutate(release = "Dec")
+
+old_dat <- old_df %>% 
+  distinct(stayid, .keep_all=TRUE) %>% 
+  mutate(week = floor_date(stay_book_in_date_time, unit="week", week_start=1)) %>% 
+  count(week) %>% 
+  mutate(release = "Aug")
+
+dat <- rbind(new_dat, old_dat)
+
+p1 <- dat %>% 
+  ggplot(aes(x = week, y = n, color = release)) +
+  geom_line()
+
+p1
+
+dat_wide <- dat %>% 
+  pivot_wider(id_cols = week, names_from = release, values_from = n) %>% 
+  mutate(diff = Dec - Aug)
+
+p2 <- dat_wide %>% 
+  ggplot(aes(x = week, y = diff)) +
+  geom_line()
+
+p2
+
+```

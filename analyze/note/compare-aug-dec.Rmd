@@ -1,0 +1,66 @@
+---
+title: "Comparison of Aug/Dec DDP releases"
+author: "UWCHR"
+date: "2025-12-02"
+output:
+    html_document:
+        html_preview: true
+        toc: true
+        toc_depth: 3
+        toc_float: true
+        code_folding: hide
+---
+
+
+```{r setup, message=FALSE, warning=FALSE, include=TRUE}
+
+options(scipen = 1000000)
+
+library(pacman)
+
+p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, ggVennDiagram, UpSetR, digest)
+
+```
+
+
+```{r setup_detention_old, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "ice_detentions_nov23-jul25.csv.gz"
+
+detention_df_old <- read_delim(here('analyze', 'input', file), delim='|') %>% 
+  mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
+         book_in_date_time = ymd_hms(book_in_date_time),
+         detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
+         stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
+         stay_book_out_date = ymd(stay_book_out_date),
+         book_in_fy = substr(quarter(book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4),
+         stay_book_in_fy = substr(quarter(stay_book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4)) %>% filter(!is.na(unique_identifier))
+
+
+
+```
+
+```{r setup_detention_new, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "ice_detentions_nov23-oct25.csv.gz"
+
+detention_df_new <- read_delim(here('analyze', 'input', file), delim='|') %>% 
+  mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
+         book_in_date_time = ymd_hms(book_in_date_time),
+         detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
+         stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
+         stay_book_out_date = ymd(stay_book_out_date),
+         book_in_fy = substr(quarter(book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4),
+         stay_book_in_fy = substr(quarter(stay_book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4)) %>% filter(!is.na(unique_identifier))
+
+
+```
+
+```{r}
+
+date <- as.Date("2025-01-02 00:00:00")
+
+in_range_old <- detention_df_old[detention_df_old$book_in_date_time <= date & detention_df_old$detention_book_out_date_time > date,]
+in_range_new <- detention_df_new[detention_df_new$book_in_date_time <= date & detention_df_new$detention_book_out_date_time > date,]
+
+```

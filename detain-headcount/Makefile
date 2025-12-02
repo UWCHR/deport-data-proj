@@ -11,7 +11,8 @@
 
 all: \
 	output/headcount_detloc_nov23-oct25.csv.gz \
-	output/headcount_citizenship_nov23-oct25.csv.gz
+	output/headcount_detloc_nov23-jul25.csv.gz
+# 	output/headcount_citizenship_nov23-oct25.csv.gz
 	
 
 old: \
