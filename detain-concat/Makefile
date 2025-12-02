@@ -11,10 +11,20 @@
 
 all: \
 	output/ice_detentions_nov23-jun25.csv.gz \
-	output/ice_detentions_nov23-jul25.csv.gz
+	output/ice_detentions_nov23-jul25.csv.gz \
+	output/ice_detentions_nov23-oct25.csv.gz
 
 clean: 
 		-rm -r output/*
+
+output/ice_detentions_nov23-oct25.csv.gz: \
+	src/detain-concat.R \
+	../import/input/2025-12/ICE_Detentions_LESA-STU_FINAL_Release.xlsx
+	mkdir -p input output
+	Rscript $< \
+		--input=../import/input/2025-12/ICE_Detentions_LESA-STU_FINAL_Release.xlsx \
+		--log=output/detain-concat.R.log \
+		--output=$@
 
 output/ice_detentions_nov23-jul25.csv.gz: \
 	src/detain-concat.R \

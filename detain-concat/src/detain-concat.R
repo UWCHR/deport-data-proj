@@ -7,7 +7,7 @@
 # ---
 
 library(pacman)
-p_load(argparse, logger, tidyverse, readxl)
+p_load(argparse, logger, tidyverse, tidylog, readxl)
 
 parser <- ArgumentParser()
 parser$add_argument("--input", default = "import/input/2025-ICLI-00019_2024-ICFO-39357_ICE_Detentions_LESA-STU_FINAL_unprotected.xlsx")

@@ -1,0 +1,53 @@
+---
+title: "ICE ERO-LESA detention data Nov. 2023-Feb. 2025"
+author: "UWCHR"
+date: "2025-03-25"
+output:
+    html_document:
+        html_preview: true
+        toc: true
+        toc_depth: 3
+        toc_float: true
+        code_folding: hide
+---
+
+
+```{r setup, message=FALSE, warning=FALSE, include=TRUE}
+
+options(scipen = 1000000)
+
+library(pacman)
+
+p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, digest, ggsankeyfier)
+
+file <- "ice_detentions_nov23-oct25.csv.gz"
+
+new_df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
+  janitor::clean_names() %>% 
+  mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
+         book_in_date_time = ymd_hms(book_in_date_time),
+         detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
+         stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
+         )
+
+file <- "ice_detentions_nov23-jul25.csv.gz"
+
+old_df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
+  janitor::clean_names() %>% 
+  mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
+         book_in_date_time = ymd_hms(book_in_date_time),
+         detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
+         stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
+         )
+
+```
+
+```{r}
+
+dec_facils <- unique(new_df$detention_facility_code)
+
+aug_facils <- unique(old_df$detention_facility_code)
+
+new_facils <- setdiff(dec_facils, aug_facils)
+
+```

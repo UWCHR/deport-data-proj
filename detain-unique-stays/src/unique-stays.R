@@ -7,7 +7,7 @@
 # ---
 
 library(pacman)
-p_load(argparse, logger, tidyverse, arrow, lubridate, zoo, digest, readxl)
+p_load(argparse, logger, tidyverse, tidylog, arrow, lubridate, zoo, digest, readxl)
 
 parser <- ArgumentParser()
 parser$add_argument("--input", default = "ice_detentions_nov23-jun25.csv.gz")

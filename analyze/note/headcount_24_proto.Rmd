@@ -1,0 +1,319 @@
+---
+title: "ICE ERO-LESA detention data Nov. 2023-Feb. 2025"
+author: "UWCHR"
+date: "2025-03-25"
+output:
+    html_document:
+        html_preview: true
+        toc: true
+        toc_depth: 3
+        toc_float: true
+        code_folding: hide
+---
+
+
+```{r setup, message=FALSE, warning=FALSE, include=TRUE}
+
+options(scipen = 1000000)
+
+library(pacman)
+
+p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, digest, ggsankeyfier)
+
+file <- "ice_detentions_nov23-jul25.csv.gz"
+
+df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
+  janitor::clean_names() %>% 
+  mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
+         book_in_date_time = ymd_hms(book_in_date_time),
+         detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
+         stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
+         )
+
+```
+
+
+```{r 24_hr_headcounter_setup, message=FALSE, warning=FALSE, include=TRUE}
+
+# This is intended to be a 24-hour inclusive population count, versus midnight headcount
+
+# Transform data to "fill in" missing `detention_book_out_date_time` values
+# in order to account for ongoing detention stays at time of release of data
+max_date <- max(df$stay_book_out_date_time, na.rm=TRUE)
+
+df <- df %>%
+  mutate(detention_book_out_date_time_min = 
+           case_when(is.na(detention_book_out_date_time) ~ max_date,
+                     TRUE ~ detention_book_out_date_time))
+
+# Define timeline for calculation of daily detained population
+timeline_start <- min(as.Date(df$book_in_date_time), na.rm=TRUE)
+timeline_end <- max(as.Date(df$detention_book_out_date_time), na.rm=TRUE)
+timeline_start_midnight <- as.POSIXct(paste(timeline_start, "00:00:00"), tz = "UTC") 
+timeline_end_midnight <- as.POSIXct(paste(timeline_end, "00:00:00"), tz = "UTC") 
+timeline <- seq(timeline_start_midnight, timeline_end_midnight, by='day')
+
+# Function counts all in-range detention placement records in dataset `df` for a
+# given `date` by a given grouping variable `var`
+
+headcounter <- function(date, df, group_vars) {
+  
+  in_range <- df[df$book_in_date_time <= date & df$detention_book_out_date_time > date,]
+  
+  in_range %>% 
+    group_by(across(all_of(group_vars))) %>% 
+    summarize(n = n()) %>% 
+    complete(fill = list(n = 0)) %>% 
+    mutate(date=date)
+  
+  }
+
+headcounter_24hr <- function(date, df, group_vars) {
+  
+  in_range <- df[date(df$book_in_date_time) <= date(date) & date(df$detention_book_out_date_time_min) >= date(date),]
+  
+  in_range %>% 
+    group_by(across(all_of(group_vars))) %>% 
+    summarize(n = n()) %>% 
+    complete(fill = list(n = 0)) %>% 
+    mutate(date=date)
+
+  }
+
+
+# headcounter_both <- function(date, df, group_vars) {
+#   
+#   in_range <- df[df$book_in_date_time <= date & df$detention_book_out_date_time > date,]
+#   
+#   in_range_24 <- df[date(df$book_in_date_time) <= date(date) & date(df$detention_book_out_date_time_min) >= date(date),]
+#   
+#   date <- date(date)
+#   
+#   in_range <- in_range %>% 
+#     group_by(across(all_of(group_vars))) %>% 
+#     summarize(n = n()) %>% 
+#     complete(fill = list(n = 0)) %>% 
+#     mutate(date=date)
+#   
+#   in_range_24 <- in_range_24 %>% 
+#     group_by(across(all_of(group_vars))) %>% 
+#     summarize(n_24 = n()) %>% 
+#     complete(fill = list(n = 0)) %>% 
+#     mutate(date=date)
+#   
+#   out <- left_join(in_range, in_range_24, by=c("date", group_vars))
+# 
+#   out
+#   
+#   }
+
+```
+
+```{r cscnwwa_24_hr_headcount}
+
+# Generate limited sample dataset
+temp_df <- df %>%
+  filter(detention_facility_code == "CSCNWWA")
+
+# Apply function to timeline
+system.time(cscnwwa_midnight <- lapply(timeline, headcounter, df=temp_df, group_vars=c('detention_facility_code')))
+
+system.time(cscnwwa_24_hr <- lapply(timeline, headcounter_24hr, df=temp_df, group_vars=c('detention_facility_code')))
+
+
+# system.time(cscnwwa_both <- lapply(timeline, headcounter_both, df=temp_df, group_vars=c('detention_facility_code')))
+
+# Transform output into data frame
+
+cscnwwa_midnight <- map_dfr(cscnwwa_midnight, bind_rows)
+
+cscnwwa_24_hr <- map_dfr(cscnwwa_24_hr, bind_rows)
+
+# cscnwwa_both <- map_dfr(cscnwwa_both, bind_rows)
+
+```
+
+Improved 24 hour inclusive headcount looks correct (always higher than snapshot headcount):
+
+```{r compare_headcounts}
+
+cscnwwa <- cscnwwa %>% 
+  mutate(type = "headcount")
+
+cscnwwa_24_hr <- cscnwwa_24_hr %>% 
+  mutate(type = "24-hr")
+
+dat <- rbind(cscnwwa, cscnwwa_24_hr)
+
+dat_wide <- dat %>% 
+  pivot_wider(id_cols = "date", names_from="type", values_from="n") %>% 
+  mutate(diff = `24-hr` - headcount)
+
+p1 <- dat %>% 
+  ggplot(aes(x=date, y = n, color = type)) +
+  geom_line()
+
+p1
+
+p2 <- dat_wide %>% 
+  ggplot(aes(x = date , y=diff)) +
+  geom_line()
+
+p2
+
+```
+
+
+
+```{r select_facil_placement_length}
+
+select_facil <- c("FDLHOLD", "SEAHOLD", "YAKHOLD", "POOHOLD", "EUGHOLD", "MEDHOLD")
+
+dat <- df %>%
+  filter(detention_facility_code %in% select_facil)
+
+p1 <- dat %>% 
+  ggplot(aes(y = detention_facility_code, x = placement_length)) +
+  geom_boxplot() +
+  geom_vline(xintercept=3, color = "red")
+
+p1
+
+over_3 <- dat %>% 
+  filter(placement_length >= 3)
+
+write_delim(over_3, here::here("analyze", "output", "hold_over_3.csv"), delim=',')
+
+```
+
+Snapshot headcounts miss many people detained less than 24 hours at holding rooms:
+
+```{r select_facil_headcount}
+
+dat <- headcount_df %>% 
+  filter(detention_facility_code %in% select_facil)
+
+p1 <- dat %>% 
+  filter(date >= "2025-01-01") %>% 
+  ggplot(aes(x = date, y = n, fill = detention_facility_code)) +
+  geom_col(position="dodge") +
+  facet_wrap(~detention_facility_code)
+
+p1
+
+```
+
+```{r select_facil_24_hr_headcount}
+
+# Generate limited sample dataset
+temp_df <- df %>%
+  filter(str_detect(detention_facility_code, "HOLD"))
+
+# Apply function to timeline
+headcount_24_hr <- lapply(timeline, headcounter_24hr, df=temp_df, group_vars=c('detention_facility_code'))
+
+
+# Transform output into data frame
+headcount_24_hr <- map_dfr(headcount_24_hr, bind_rows)
+
+write_delim(headcount_24_hr, here::here("analyze/output/holdroom_headcount_24_hr.csv"), delim=',')
+
+```
+
+```{r plot_hold}
+
+p1 <- headcount_24_hr %>% 
+  filter(detention_facility_code %in% select_facil,
+         date >= "2025-01-01") %>% 
+  ggplot(aes(x = date, y = n, fill = detention_facility_code)) +
+  geom_col(position="dodge") +
+  facet_wrap(~detention_facility_code)
+
+p1 + labs(title = "Daily population (24-hour inclusive)")
+
+```
+
+```{r avg_pop}
+
+tab1 <- headcount_24_hr %>% 
+  filter(detention_facility_code %in% select_facil) %>% 
+  group_by(detention_facility_code) %>% 
+  summarize(med_pop = median(n),
+            avg_pop = mean(n))
+
+tab2 <- headcount_24_hr %>% 
+  filter(detention_facility_code %in% select_facil) %>% 
+  mutate(week = floor_date(date, "week", week_start = "Monday")) %>%
+  group_by(detention_facility_code, week) %>% 
+  summarize(weekly_med_pop = median(n),
+            weekly_avg_pop = mean(n)) %>% 
+  ungroup()
+
+p2 <- tab2 %>% 
+  ggplot(aes(x = week, y = weekly_avg_pop, color = detention_facility_code)) +
+  geom_line() +
+  gghighlight(detention_facility_code == "POOHOLD",
+              use_direct_label = FALSE) +
+  labs(title="Weekly ADP, Portland ICE Hold Room",
+       subtitle="Compared to other regional hold rooms")
+
+p2
+
+tab3 <- headcount_24_hr %>% 
+  filter(detention_facility_code %in% select_facil) %>% 
+  mutate(month = as.yearmon(date)) %>%
+  group_by(detention_facility_code, month) %>% 
+  summarize(monthly_med_pop = median(n),
+            monthly_avg_pop = mean(n)) %>% 
+  ungroup()
+
+p3 <- tab3 %>% 
+  ggplot(aes(x = month, y = monthly_avg_pop, color = detention_facility_code)) +
+  geom_line() +
+  gghighlight(detention_facility_code == "POOHOLD",
+              use_direct_label = FALSE) +
+  labs(title="Monthly ADP, Portland ICE Hold Room",
+       subtitle="Compared to other regional hold rooms")
+
+p3
+
+write_delim(tab2, here::here("analyze/output/pnw_holdroom_weekly_adp.csv"), delim=',')
+
+write_delim(tab3, here::here("analyze/output/pnw_holdroom_monthly_adp.csv"), delim=',')
+
+```
+
+```{r}
+
+dat <- df %>%
+  filter(detention_facility_code %in% select_facil) %>% 
+  mutate(month = as.yearmon(book_in_date_time)) %>%
+  count(month, detention_facility_code)
+
+p1 <- dat %>% 
+  ggplot(aes(x = month, y = n, color = detention_facility_code)) +
+  geom_line() +
+  labs(title = "Monthly book-ins",
+      subtitle = "Select OR + WA hold rooms ")
+
+p1
+
+write_delim(dat, here::here("analyze/output/pnw_holdroom_monthly_bookins.csv"), delim=',')
+
+
+dat <- df %>%
+  filter(detention_facility_code %in% select_facil) %>% 
+  mutate(week = floor_date(book_in_date_time, "week", week_start = "Monday")) %>%
+  count(week, detention_facility_code)
+
+p2 <- dat %>% 
+  ggplot(aes(x = week, y = n, color = detention_facility_code)) +
+  geom_line() +
+    labs(title = "Weekly book-ins",
+      subtitle = "Select OR + WA hold rooms ")
+
+p2
+
+write_delim(dat, here::here("analyze/output/pnw_holdroom_weekly_bookins.csv"), delim=',')
+
+```

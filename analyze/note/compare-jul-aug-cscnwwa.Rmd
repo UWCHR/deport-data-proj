@@ -1,0 +1,170 @@
+---
+title: "Comparison of NWDC rosters across July/Aug DDP releases"
+author: "UWCHR"
+date: "2025-07-30"
+output:
+    html_document:
+        html_preview: true
+        toc: true
+        toc_depth: 3
+        toc_float: true
+        code_folding: hide
+---
+
+
+```{r setup, message=FALSE, warning=FALSE, include=TRUE}
+
+options(scipen = 1000000)
+
+library(pacman)
+
+p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, ggVennDiagram, UpSetR, digest)
+
+```
+
+
+```{r setup_detention_jul, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "ice_detentions_nov23-jun25.csv.gz"
+
+detention_df_jul <- read_delim(here('analyze', 'input', file), delim='|') %>% 
+  mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
+         book_in_date_time = ymd_hms(book_in_date_time),
+         detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
+         stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
+         stay_book_out_date = ymd(stay_book_out_date),
+         book_in_fy = substr(quarter(book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4),
+         stay_book_in_fy = substr(quarter(stay_book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4)) %>% filter(!is.na(unique_identifier))
+
+
+
+```
+
+```{r setup_detention_aug, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "ice_detentions_nov23-jul25.csv.gz"
+
+detention_df_aug <- read_delim(here('analyze', 'input', file), delim='|') %>% 
+  mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
+         book_in_date_time = ymd_hms(book_in_date_time),
+         detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
+         stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
+         stay_book_out_date = ymd(stay_book_out_date),
+         book_in_fy = substr(quarter(book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4),
+         stay_book_in_fy = substr(quarter(stay_book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4)) %>% filter(!is.na(unique_identifier))
+
+
+```
+
+```{r}
+
+jul_nwdc_releases <- detention_df_jul %>% 
+  filter(!is.na(unique_identifier),
+         detention_facility_code == "CSCNWWA",
+         detention_book_out_date_time >= "2025-01-01",
+         detention_book_out_date_time <= "2025-03-18") %>%
+  arrange(detention_book_out_date_time) %>% 
+  distinct(unique_identifier, .keep_all = TRUE)
+
+aug_nwdc_releases <- detention_df_aug %>% 
+  filter(!is.na(unique_identifier),
+         detention_facility_code == "CSCNWWA",
+         detention_book_out_date_time >= "2025-01-01",
+         detention_book_out_date_time <= "2025-03-18") %>%
+  arrange(detention_book_out_date_time) %>% 
+  distinct(unique_identifier, .keep_all = TRUE)
+
+shared_cols <- intersect(names(jul_nwdc_releases), names(aug_nwdc_releases))
+
+```
+
+```{r}
+
+
+hash_cols <- c("stay_book_in_date_time",
+               "book_in_date_time",
+               "stay_book_out_date",
+               "gender",
+               "marital_status",
+               "birth_year",
+               "citizenship_country")
+
+vdigest <- Vectorize(digest)
+
+jul_nwdc_releases <- jul_nwdc_releases %>%
+  rowwise() %>% 
+  tidyr::unite(to_hash, all_of(hash_cols), sep = "", remove = FALSE) %>% 
+  mutate(hash = vdigest(to_hash)) %>%
+  select(-c(to_hash))
+
+aug_nwdc_releases <- aug_nwdc_releases %>%
+  rowwise() %>% 
+  tidyr::unite(to_hash, all_of(hash_cols), sep = "", remove = FALSE) %>% 
+  mutate(hash = vdigest(to_hash)) %>%
+  select(-c(to_hash))
+
+hash_intersect <- intersect(jul_nwdc_releases$hash, aug_nwdc_releases$hash)
+hash_diff <- union(setdiff(jul_nwdc_releases$hash, aug_nwdc_releases$hash), setdiff(aug_nwdc_releases$hash, jul_nwdc_releases$hash))
+
+jul_dupe <- jul_nwdc_releases[duplicated(jul_nwdc_releases$hash) | duplicated(jul_nwdc_releases$hash, fromLast = TRUE),]
+
+stopifnot(nrow(jul_dupe) == 0)
+
+aug_dupe <- aug_nwdc_releases[duplicated(aug_nwdc_releases$hash) | duplicated(aug_nwdc_releases$hash, fromLast = TRUE),]
+
+stopifnot(nrow(aug_dupe) == 0)
+
+jul_nwdc_releases <- jul_nwdc_releases %>% 
+  mutate(differs = hash %in% hash_diff)
+
+aug_nwdc_releases <- aug_nwdc_releases %>% 
+  mutate(differs = hash %in% hash_diff)
+
+```
+
+```{r}
+
+jul_ids <- jul_nwdc_releases %>% 
+  dplyr::select(unique_identifier, hash)
+
+aug_ids <- aug_nwdc_releases %>% 
+  dplyr::select(unique_identifier, hash)
+
+crosswalk <- full_join(jul_ids, aug_ids, by = "hash", suffix = c("_jul", "_aug"))
+
+jul_nwdc_releases <- left_join(jul_nwdc_releases, crosswalk, by="hash")
+
+aug_nwdc_releases <- left_join(aug_nwdc_releases, crosswalk, by="hash")
+
+jul_unmatched <- jul_nwdc_releases %>% 
+  filter(is.na(unique_identifier_aug))
+
+aug_unmatched <- aug_nwdc_releases %>% 
+  filter(is.na(unique_identifier_jul))
+
+final_shared_cols <- intersect(names(jul_nwdc_releases), names(aug_nwdc_releases))
+
+```
+
+```{r full}
+
+jul_nwdc_releases_shared <- jul_nwdc_releases %>% 
+  filter(!hash %in% jul_unmatched$hash) %>% 
+  dplyr::select(all_of(final_shared_cols), -unique_identifier)
+
+aug_nwdc_releases_shared <- aug_nwdc_releases %>% 
+  filter(!hash %in% aug_unmatched$hash) %>% 
+  dplyr::select(all_of(final_shared_cols), -unique_identifier)
+
+full_nwdc_releases <- rbind(jul_nwdc_releases_shared, aug_nwdc_releases_shared) %>% 
+  distinct(hash, .keep_all = TRUE)
+
+temp <- full_nwdc_releases %>% filter(
+  hash %in% hash_diff
+)
+
+# write_delim(full_nwdc_releases, here::here('analyze', 'output', 'cscnwwa_releases_jan1-mar18_crosswalk.csv'), delim = "|")
+
+```
+
+

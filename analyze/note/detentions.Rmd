@@ -20,7 +20,7 @@ library(pacman)
 
 p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, digest, ggsankeyfier)
 
-file <- "ice_detentions_nov23-jul25.csv.gz"
+file <- "ice_detentions_nov23-oct25.csv.gz"
 
 df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
   janitor::clean_names() %>% 
@@ -104,7 +104,7 @@ sum(df$known_facil) / nrow(df)
 unknown_facil <- unique(df[df$known_facil == FALSE, c("detention_facility_code", "detention_facility")]) %>% 
   arrange(detention_facility)
 
-write_delim(unknown_facil, here::here('analyze', 'output', 'unknown_facilities_2025.csv'), delim=',')
+# write_delim(unknown_facil, here::here('analyze', 'output', 'unknown_facilities_2025.csv'), delim=',')
 
 to_join <- known_facil %>% 
   dplyr::select(detloc, aor, state, circuit, over_72, type) %>% 
@@ -809,7 +809,7 @@ cscnwwa <- headcount_df %>%
 wa_facil_headcount <- headcount_df %>% 
   filter(detention_facility_code %in% wa_facil)
 
-write_delim(wa_facil_headcount, here::here('analyze', 'output', 'wa_facil_headcount.csv'), delim=',')
+# write_delim(wa_facil_headcount, here::here('analyze', 'output', 'wa_facil_headcount.csv'), delim=',')
 
 p1 <- wa_facil_headcount %>% 
   filter(date >= "2023-11-01",
@@ -918,7 +918,7 @@ p2
 
 ```{r select_facil_placement_length}
 
-select_facil <- c("FDLHOLD", "SEAHOLD", "YAKHOLD", "POOHOLD", "EUGHOLD", "MEDHOLD")
+select_facil <- c("FDLHOLD", "SEAHOLD", "YAKHOLD", "SPOHOLD", "POOHOLD", "EUGHOLD", "MEDHOLD")
 
 dat <- df %>%
   filter(detention_facility_code %in% select_facil)

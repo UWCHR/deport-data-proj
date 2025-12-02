@@ -338,6 +338,52 @@ p3
 
 ```
 
+```{r removals_historic}
+
+rem_hist <- read_delim(here::here("analyze", "input", "ice_removals_fy12-23ytd.csv.gz"), delim='|') %>% 
+  mutate(departed_date = as.Date(departed_date, format = "%m/%d/%Y"),
+         fy = substr(quarter(departed_date, fiscal_start = 10, type = "year.quarter"), 1, 4))
+
+dat_hist <- rem_hist %>% 
+  filter(departed_date >= "2011-10-01",
+         departed_date <= "2022-09-30") %>% 
+  group_by(aor, fy) %>% 
+  summarize(n = n()) %>%
+  mutate(dataset = "UWCHR")
+
+dat_new <- removal_df %>% 
+  mutate(fy = substr(quarter(departed_date, fiscal_start = 10, type = "year.quarter"), 1, 4)) %>% 
+  filter(departed_date >= "2023-10-01") %>% 
+  group_by(docket_aor, fy) %>% 
+  summarize(n = n()) %>% 
+  rename(aor = docket_aor) %>% 
+  mutate(dataset = "DDP")
+
+dat <- rbind(dat_hist, dat_new) %>% 
+  mutate(fy = as.numeric(fy))
+
+p1 <- dat %>% 
+  filter(aor %in% c("SEA", "Seattle Area of Responsibility")) %>% 
+  ggplot(aes(x = fy, y = n, fill = dataset)) +
+  geom_col() +
+  labs(title = "Removals from ICE Seattle AOR",
+       subtitle = "Oct. 2011 - Jul. 2025",
+       caption = "Source: ICE data obtained via FOIA")
+
+p1
+
+p2 <- dat %>% 
+  ggplot(aes(x = fy, y = n, fill = dataset)) +
+  geom_col() +
+  # gghighlight(aor %in% c("ELP", "El Paso Area of Responsibility")) +
+  labs(title = "Annual Nationwide ICE Removals",
+       subtitle = "Oct. 2011 - Jul. 2025",
+       caption = "Source: ICE data obtained via FOIA")
+
+p2
+
+```
+
 ```{r tab_docket}
 
 tab_docket <- removal_df %>%
