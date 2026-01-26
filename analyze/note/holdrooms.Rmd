@@ -236,7 +236,7 @@ bookins_natl <- df %>%
   count(week)
 
 p2 <- bookins_natl %>% 
-  # filter(week != as_datetime("2025-02-17")) %>% 
+  filter(week != as_datetime("2025-02-17")) %>% 
   ggplot(aes(x = week, y = n)) +
   geom_line() +
   geom_vline(xintercept=as_datetime("2025-01-20"), linetype="dashed") +
@@ -440,7 +440,7 @@ p2
 
 ```{r get_wa_arrests}
 
-file <- "ERO_Admin_Arrests_LESA-STU-FINAL_Release.xlsx"
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests.xlsx"
 
 arr <- read_excel(here('analyze', 'input', file), skip=6) %>% 
   janitor::clean_names()
@@ -801,7 +801,7 @@ p2
 
 ```{r natl_headcount_per_facil}
 
-headcount_df <- read_delim(here::here('detain-headcount', 'output', 'headcount_detloc_nov23-oct25.csv.gz'), delim='|')
+headcount_df <- read_delim(here::here('detain-headcount', 'output', 'headcount_detloc_nov23-jun25.csv.gz'), delim='|')
 
 cscnwwa <- headcount_df %>% 
   filter(detention_facility_code == "CSCNWWA")
@@ -825,8 +825,8 @@ p1
 p2 <- wa_facil_headcount %>% 
   filter(date >= "2025-01-01",
          str_detect(detention_facility_code, "HOLD")) %>%
-  ggplot(aes(x = date, y = n, fill = detention_facility_code)) +
-  geom_col(position = "stack") +
+  ggplot(aes(x = date, y = n, color = detention_facility_code)) +
+  geom_line() +
   ylim(0, NA) +
   labs(title = "Daily detained population",
       subtitle = "WA hold rooms")
@@ -933,31 +933,9 @@ p1
 over_3 <- dat %>% 
   filter(placement_length >= 3)
 
-over_3_ids <- unique(over_3$unique_identifier)
-
 write_delim(over_3, here::here("analyze", "output", "hold_over_3.csv"), delim=',')
 
-over_3_all_recs <- df %>% 
-  filter(unique_identifier %in% unlist(over_3_ids))
-
-write_delim(over_3, here::here("analyze", "output", "hold_over_3_all_stints.csv"), delim=',')
-
 ```
-
-```{r}
-
-dat <- df %>%
-  filter(detention_facility_code %in% select_facil)
-
-p1 <- dat %>% 
-  ggplot(aes(y = detention_facility_code, x = placement_length)) +
-  geom_boxplot() +
-  geom_vline(xintercept=3, color = "red")
-
-p1
-
-```
-
 
 Snapshot headcounts miss many people detained less than 24 hours at holding rooms:
 
@@ -991,8 +969,6 @@ headcount_24_hr <- map_dfr(headcount_24_hr, bind_rows)
 
 write_delim(headcount_24_hr, here::here("analyze/output/holdroom_headcount_24_hr.csv"), delim=',')
 
-# headcount_24_hr <- read_delim(here::here("analyze/output/holdroom_headcount_24_hr.csv"), delim=',')
-
 ```
 
 ```{r plot_hold}
@@ -1002,7 +978,7 @@ p1 <- headcount_24_hr %>%
          date >= "2025-01-01") %>% 
   ggplot(aes(x = date, y = n, fill = detention_facility_code)) +
   geom_col(position="dodge") +
-  facet_wrap(~detention_facility_code, scales="free_y")
+  facet_wrap(~detention_facility_code)
 
 p1 + labs(title = "Daily population (24-hour inclusive)")
 
@@ -1052,16 +1028,9 @@ p3 <- tab3 %>%
 
 p3
 
-# write_delim(tab2, here::here("analyze/output/pnw_holdroom_weekly_adp.csv"), delim=',')
+write_delim(tab2, here::here("analyze/output/pnw_holdroom_weekly_adp.csv"), delim=',')
 
-# write_delim(tab3, here::here("analyze/output/pnw_holdroom_monthly_adp.csv"), delim=',')
-
-p4 <- tab3 %>% 
-  ggplot(aes(x = month, y = monthly_avg_pop, color = detention_facility_code)) +
-  geom_line() +
-  labs(title="Monthly ADP, PNW regional hold rooms")
-
-p4
+write_delim(tab3, here::here("analyze/output/pnw_holdroom_monthly_adp.csv"), delim=',')
 
 ```
 
