@@ -803,6 +803,23 @@ p1
   
 ```
 
+```{r yak_arrests}
+
+dat <- arrest_df %>% 
+  filter(str_detect(apprehension_site_landmark, "YAKIMA")) %>% 
+  mutate(week = floor_date(apprehension_date, "week", week_start = "Monday")) %>% 
+  count(week, apprehension_site_landmark)
+
+p1 <- dat %>% 
+  ggplot(aes(x=week, y=n, fill=apprehension_site_landmark)) +
+  geom_col() +
+  labs(title = "Weekly total ICE arrests mentioning `Yakima`")
+
+p1
+
+```
+
+
 # Comparison of Jul/Aug/Dec releases
 
 ```{r load_arrests_jul, message=FALSE, warning=FALSE, include=TRUE}
