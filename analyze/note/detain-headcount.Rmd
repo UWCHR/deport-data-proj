@@ -282,12 +282,27 @@ p1 <- dat %>%
   ylim(0, NA) +
   ylab("Population") +
   labs(title = "NWIPC daily detention population",
-       subtitle = "Nov. 2011 - Jul. 2025",
+       subtitle = "Nov. 2011 - Oct. 2025",
        caption = "Data source: ICE data obtained via FOIA")
 
 p1
 
 write_delim(dat, here::here("analyze", "output", "nwipc_headcount.csv"), delim=',')
+
+p2 <- dat %>% 
+  group_by(dataset, date) %>% 
+  summarize(n = sum(n)) %>% 
+  filter(dataset == "DDP") %>% 
+  ggplot(aes(x = date, y = n, color = dataset)) +
+  geom_line() +
+  geom_hline(yintercept = 1575) +
+  ylim(0, NA) +
+  ylab("Population") +
+  labs(title = "NWIPC daily detention population",
+       subtitle = "Nov. 15, 2024 - Oct. 16, 2025",
+       caption = "Data source: ICE data obtained via FOIA")
+
+p2
 
 ```
 
