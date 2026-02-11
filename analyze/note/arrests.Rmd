@@ -21,7 +21,7 @@ library(pacman)
 
 p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl)
 
-general_caption <- "Data: ICE administrative arrests obtained by Deportation Data Project\nAnalysis: University of Washington Center for Human Rights"
+general_caption <- "Data: ICE arrests obtained by Deportation Data Project\nAnalysis: University of Washington Center for Human Rights"
 
 file <- "ERO_Admin_Arrests_LESA-STU-FINAL_Release.xlsx"
 
@@ -101,7 +101,7 @@ figure_2 <- dat_2 |>
   scale_y_continuous(labels = scales::comma) +
   scale_color_manual(values = c("#0072B2", "#D55E00")) +
   coord_cartesian(clip = "off") +
-  labs(color = "", title = "Weekly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by Criminal Conviction Status", x = "", y = "Number of arrests per Week", caption = "Source: ICE via FOIA request") +
+  labs(color = "", title = "Weekly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by Criminal Conviction Status", x = "", y = "Number of arrests per Week", caption = general_caption) +
   theme_minimal() +
   theme(plot.margin = margin(5, 0, 5, 5),
         plot.title = element_text(margin = margin(0,0,5,0)),
@@ -122,7 +122,7 @@ figure_3 <- dat_2 |>
   scale_y_continuous(labels = scales::comma) +
   scale_fill_manual(values = c("#0072B2", "#D55E00")) +
   coord_cartesian(clip = "off") +
-  labs(fill = "", title = "Weekly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by Criminal Conviction Status", x = "", y = "Number of arrests per Week", caption = "Source: ICE via FOIA request") +
+  labs(fill = "", title = "Weekly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by Criminal Conviction Status", x = "", y = "Number of arrests per Week", caption = general_caption) +
   theme_minimal() +
   theme(plot.margin = margin(5, 0, 5, 5),
         plot.title = element_text(margin = margin(0,0,5,0)),
@@ -157,7 +157,7 @@ geom_vline(data = NULL, xintercept = as.Date("2025-01-20"), color = gray(0.2), l
   coord_cartesian(clip = "off") +
   labs(title = "Weekly arrests by Immigration and Customs Enforcement (ICE)",
        subtitle = "Seattle Area of Responsibility",
-       x = "", y = "Number of arrests per Week", caption = "Source: ICE via FOIA request") +
+       x = "", y = "Number of arrests per Week", caption = general_caption) +
   theme_minimal() +
   theme(plot.margin = margin(5, 0, 5, 5),
         plot.title = element_text(margin = margin(0,0,10,0)),
@@ -184,7 +184,7 @@ figure_2 <-
   scale_y_continuous(labels = scales::comma, limits = c(0, 100)) +
   scale_color_manual(values = c("#0072B2", "#D55E00")) +
   coord_cartesian(clip = "off") +
-  labs(color = "", title = "Weekly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by Criminal Conviction Status (Seattle AOR)", x = "", y = "Number of arrests per Week", caption = "Source: ICE via FOIA request") +
+  labs(color = "", title = "Weekly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by Criminal Conviction Status (Seattle AOR)", x = "", y = "Number of arrests per Week", caption = general_caption) +
   theme_minimal() +
   theme(plot.margin = margin(5, 0, 5, 5),
         plot.title = element_text(margin = margin(0,0,5,0)),
@@ -208,7 +208,7 @@ pre_post_mean <- sea |>
   group_by(trump) %>% 
   summarize(arrests_per_month = mean(n))
 
-figure_1 <-
+figure_3 <-
   sea |>
     filter(apprehension_date >= "2023-09-01",
          apprehension_date <= "2025-09-30"
@@ -218,13 +218,14 @@ figure_1 <-
   ggplot(aes(month, n)) +
 geom_vline(data = NULL, xintercept = as.Date("2025-01-20"), color = gray(0.2), linetype = "dashed") +
   annotate("text", x = as.Date("2025-01-20") - days(7), y = 300, label = "Trump II\ninauguration", hjust = 1, size = 3.5, color = gray(0.2)) +
-  geom_line(linewidth = 0.8) +
+  geom_line(linewidth = 0.8, color = "#440154FF") +
+  scale_color_viridis_d() +
   scale_y_continuous(labels = scales::comma) +
   coord_cartesian(clip = "off") +
   ylim(0, NA) +
   labs(title = "Monthly arrests by Immigration and Customs Enforcement (ICE)",
        subtitle = "Seattle Area of Responsibility",
-       x = "", y = "Number of arrests per month", caption = "Source: ICE via FOIA request") +
+       x = "", y = "Number of arrests per month", caption = general_caption) +
   theme_minimal() +
   theme(plot.margin = margin(5, 0, 5, 5),
         plot.title = element_text(margin = margin(0,0,10,0)),
@@ -234,7 +235,7 @@ geom_vline(data = NULL, xintercept = as.Date("2025-01-20"), color = gray(0.2), l
         axis.title.y = element_text(margin = margin(0, 15, 0, 0)),
         strip.text = element_text(hjust = 0, size = 12))
 
-figure_1
+figure_3
 
 ```
 
@@ -260,7 +261,7 @@ geom_vline(data = NULL, xintercept = as.Date("2025-01-20"), color = gray(0.2), l
   coord_cartesian(clip = "off") +
   labs(title = "Weekly arrests by Immigration and Customs Enforcement (ICE)",
        subtitle = "WA state",
-       x = "", y = "Number of arrests per Week", caption = "Source: ICE via FOIA request") +
+       x = "", y = "Number of arrests per Week", caption = general_caption) +
   theme_minimal() +
   theme(plot.margin = margin(5, 0, 5, 5),
         plot.title = element_text(margin = margin(0,0,10,0)),
@@ -289,7 +290,7 @@ figure_2 <- dat_2 %>%
   scale_y_continuous(labels = scales::comma, limits = c(0, 100)) +
   scale_color_manual(values = c("#0072B2", "#D55E00")) +
   coord_cartesian(clip = "off") +
-  labs(color = "", title = "Weekly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by Criminal Conviction Status (WA state)", x = "", y = "Number of arrests per Week", caption = "Source: ICE via FOIA request") +
+  labs(color = "", title = "Weekly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by Criminal Conviction Status (WA state)", x = "", y = "Number of arrests per Week", caption = general_caption) +
   theme_minimal() +
   theme(plot.margin = margin(5, 0, 5, 5),
         plot.title = element_text(margin = margin(0,0,5,0)),
@@ -328,7 +329,7 @@ geom_vline(data = NULL, xintercept = as.Date("2025-01-20"), color = gray(0.2), l
   coord_cartesian(clip = "off") +
   labs(title = "Weekly arrests by Immigration and Customs Enforcement (ICE)",
        subtitle = "OR state",
-       x = "", y = "Number of arrests per Week", caption = "Source: ICE via FOIA request") +
+       x = "", y = "Number of arrests per Week", caption = general_caption) +
   theme_minimal() +
   theme(plot.margin = margin(5, 0, 5, 5),
         plot.title = element_text(margin = margin(0,0,10,0)),
@@ -357,7 +358,7 @@ figure_2 <- dat_2 %>%
   scale_y_continuous(labels = scales::comma, limits = c(0, 100)) +
   scale_color_manual(values = c("#0072B2", "#D55E00")) +
   coord_cartesian(clip = "off") +
-  labs(color = "", title = "Weekly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by Criminal Conviction Status (OR state)", x = "", y = "Number of arrests per Week", caption = "Source: ICE via FOIA request") +
+  labs(color = "", title = "Weekly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by Criminal Conviction Status (OR state)", x = "", y = "Number of arrests per Week", caption = general_caption) +
   theme_minimal() +
   theme(plot.margin = margin(5, 0, 5, 5),
         plot.title = element_text(margin = margin(0,0,5,0)),
@@ -520,7 +521,7 @@ figure_1 <-
   scale_y_continuous(labels = scales::comma) +
   scale_color_manual(values = c("#0072B2", "#D55E00")) +
   coord_cartesian(clip = "off") +
-  labs(color = "", title = "Weekly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by whether associated with detention", x = "", y = "Number of arrests per Week", caption = "Source: ICE via FOIA request") +
+  labs(color = "", title = "Weekly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by whether associated with detention", x = "", y = "Number of arrests per Week", caption = general_caption) +
   theme_minimal() +
   theme(plot.margin = margin(5, 0, 5, 5),
         plot.title = element_text(margin = margin(0,0,5,0)),
@@ -549,7 +550,7 @@ figure_2 <-
   scale_y_continuous(labels = scales::comma) +
   scale_color_manual(values = c("#0072B2", "#D55E00")) +
   coord_cartesian(clip = "off") +
-  labs(color = "", title = "Weekly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by whether associated with detention (SEA AOR)", x = "", y = "Number of arrests per Week", caption = "Source: ICE via FOIA request") +
+  labs(color = "", title = "Weekly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by whether associated with detention (SEA AOR)", x = "", y = "Number of arrests per Week", caption = general_caption) +
   theme_minimal() +
   theme(plot.margin = margin(5, 0, 5, 5),
         plot.title = element_text(margin = margin(0,0,5,0)),
@@ -575,10 +576,10 @@ figure_3 <-
   annotate("text", x = as.Date("2025-01-20") - days(7), y = 300, label = "Trump II\ninauguration", hjust = 1, size = 3.5, color = gray(0.2)) +
   geom_line(linewidth = 0.8) +
   scale_y_continuous(labels = scales::comma) +
-  scale_color_manual(values = c("#0072B2", "#D55E00")) +
+  scale_color_viridis_d() +
   coord_cartesian(clip = "off") +
   ylim(0, NA) +
-  labs(color = "", title = "Monthly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by whether associated with detention (SEA AOR)", x = "", y = "Number of arrests per month", caption = "Source: ICE via FOIA request") +
+  labs(color = "", title = "Monthly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by whether associated with detention (SEA AOR)", x = "", y = "Number of arrests per month", caption = general_caption) +
   theme_minimal() +
   theme(plot.margin = margin(5, 0, 5, 5),
         plot.title = element_text(margin = margin(0,0,5,0)),
@@ -613,7 +614,7 @@ figure_1 <- dat_natl |>
   scale_y_continuous(labels = scales::comma) +
   scale_color_manual(values = c("#0072B2", "#D55E00")) +
   coord_cartesian(clip = "off") +
-  labs(color = "", title = "Weekly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by whether associated with detention (national)", x = "", y = "Number of arrests per Week", caption = "Source: ICE via FOIA request") +
+  labs(color = "", title = "Weekly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by whether associated with detention (national)", x = "", y = "Number of arrests per Week", caption = general_caption) +
   theme_minimal() +
   theme(plot.margin = margin(5, 0, 5, 5),
         plot.title = element_text(margin = margin(0,0,5,0)),
@@ -646,7 +647,7 @@ figure_2 <- dat_sea |>
   scale_y_continuous(labels = scales::comma) +
   scale_color_manual(values = c("#0072B2", "#D55E00")) +
   coord_cartesian(clip = "off") +
-  labs(color = "", title = "Weekly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by whether associated with detention (SEA AOR)", x = "", y = "Number of arrests per Week", caption = "Source: ICE via FOIA request") +
+  labs(color = "", title = "Weekly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by whether associated with detention (SEA AOR)", x = "", y = "Number of arrests per Week", caption = general_caption) +
   theme_minimal() +
   theme(plot.margin = margin(5, 0, 5, 5),
         plot.title = element_text(margin = margin(0,0,5,0)),
@@ -681,7 +682,7 @@ figure_3 <- dat_wa |>
   scale_y_continuous(labels = scales::comma) +
   scale_color_manual(values = c("#0072B2", "#D55E00")) +
   coord_cartesian(clip = "off") +
-  labs(color = "", title = "Weekly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by whether associated with detention (Washington state)", x = "", y = "Number of arrests per Week", caption = "Source: ICE via FOIA request") +
+  labs(color = "", title = "Weekly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by whether associated with detention (Washington state)", x = "", y = "Number of arrests per Week", caption = general_caption) +
   theme_minimal() +
   theme(plot.margin = margin(5, 0, 5, 5),
         plot.title = element_text(margin = margin(0,0,5,0)),
@@ -716,7 +717,7 @@ figure_4 <- dat_or |>
   scale_y_continuous(labels = scales::comma) +
   scale_color_manual(values = c("#0072B2", "#D55E00")) +
   coord_cartesian(clip = "off") +
-  labs(color = "", title = "Weekly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by whether associated with detention (Oregon state)", x = "", y = "Number of arrests per Week", caption = "Source: ICE via FOIA request") +
+  labs(color = "", title = "Weekly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by whether associated with detention (Oregon state)", x = "", y = "Number of arrests per Week", caption = general_caption) +
   theme_minimal() +
   theme(plot.margin = margin(5, 0, 5, 5),
         plot.title = element_text(margin = margin(0,0,5,0)),
@@ -1010,8 +1011,10 @@ p1 <- dat %>%
   summarize(n = sum(n)) %>% 
   ggplot(aes(x = month, y = n, fill = detention_facility)) +
   geom_col() +
-  labs(title = "Seattle AOR arrests",
-       subtitle = "First detention facility")
+  scale_fill_viridis_d() +
+  labs(title = "Seattle AOR arrests resulting in detention",
+       subtitle = "First detention facility",
+       caption = general_caption)
 
 p1
 
