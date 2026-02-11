@@ -111,3 +111,43 @@ p3 <- dat %>%
 ggplotly(p3)
 
 ```
+
+
+```{r cuban_removals}
+
+dat <- df_clean %>% 
+  filter(citizenship_country == "CUBA",
+         !is.na(departure_country)) %>% 
+  mutate(depart_month = floor_date(departed_date, unit="month")) %>% 
+  distinct(unique_identifier, .keep_all = TRUE)
+
+hist(dat$birth_year)
+
+pop_data <- dat %>%
+    filter(!is.na(birth_year), !is.na(gender), gender %in% c("Male", "Female")) %>%
+    mutate(age = 2026 - birth_year,
+           age_group = cut(age,
+                           breaks = c(0, 18, 25, 40, 60, Inf),
+                           right = FALSE)) %>%
+    count(gender, age_group) %>%
+    mutate(prop = n / sum(n)) %>%
+    ungroup() %>% 
+    mutate(n = case_when(gender == "Female" ~ -n,
+           TRUE ~ n),
+           prop = case_when(gender == "Female" ~ -prop,
+           TRUE ~ prop))
+
+pop_prop_range <- range(pop_data$prop)
+pop_prop_range_breaks <- pretty(pop_prop_range, 10)
+
+p1 <- pop_data %>% 
+    ggplot(aes(x = prop, y = age_group, fill=gender)) +
+    geom_col() +
+    scale_y_discrete(limits=rev) +
+    scale_x_continuous(breaks = pop_prop_range_breaks,
+                       labels = function(x) scales::percent(abs(x))) +
+  labs(title = "Deported Cubans age/sex distribution")
+
+p1
+
+```
