@@ -1,0 +1,113 @@
+---
+title: "ICE ERO-LESA detention data Nov. 2023-Feb. 2025"
+author: "UWCHR"
+date: "2025-03-25"
+output:
+    html_document:
+        html_preview: true
+        toc: true
+        toc_depth: 3
+        toc_float: true
+        code_folding: hide
+---
+
+
+```{r setup, message=FALSE, warning=FALSE, include=TRUE}
+
+options(scipen = 1000000)
+
+library(pacman)
+
+p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, digest, ggsankeyfier)
+
+file <- "ice_detentions_nov23-oct25.csv.gz"
+
+df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
+  janitor::clean_names() %>% 
+  mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
+         book_in_date_time = ymd_hms(book_in_date_time),
+         detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
+         stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
+         )
+
+```
+
+```{r missingness}
+
+sum(is.na(df$unique_identifier))
+sum(is.na(df$stay_book_in_date_time))
+sum(is.na(df$book_in_date_time))
+sum(is.na(df$detention_book_out_date_time))
+sum(is.na(df$stay_book_out_date_time))
+sum(is.na(df$detention_facility))
+
+```
+
+```{r unique_ids}
+
+length(unique(df$unique_identifier))
+
+sum(is.na(df$unique_identifier))
+
+```
+
+```{r dupe_placements}
+
+cols <- c('unique_identifier', 'book_in_date_time', 'detention_book_out_date_time', 'detention_facility_code')
+
+preclean <- nrow(df)
+
+df_clean <- df %>% 
+  distinct(., unique_identifier, book_in_date_time, detention_book_out_date_time, detention_facility_code, .keep_all = TRUE)
+
+postclean <- nrow(df_clean)
+
+dropped <- (preclean - postclean )
+
+(preclean - postclean )/ nrow(df_clean) * 100
+
+```
+
+```{r cuban_removals}
+
+dat <- df_clean %>% 
+  filter(citizenship_country == "CUBA",
+         !is.na(departure_country)) %>% 
+  mutate(depart_month = floor_date(departed_date, unit="month"))
+
+top_depart_country <- dat %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>% 
+  count(departure_country) %>% 
+  arrange(desc(n))
+
+p1 <- dat %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>%
+  count(depart_month, departure_country) %>% 
+  ggplot(aes(x = depart_month, y = n, fill=departure_country)) +
+  geom_col()
+
+p1
+
+
+p2 <- dat %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>%
+  count(depart_month, case_status, departure_country) %>% 
+  ggplot(aes(x = depart_month, y = n, fill=departure_country)) +
+  geom_col() +
+  facet_wrap(~case_status)
+
+p2
+
+p3 <- dat %>% 
+  distinct(unique_identifier, .keep_all = TRUE) %>%
+  filter(departure_country %in% c("CUBA", "MEXICO")) %>% 
+  count(depart_month, case_category, departure_country) %>% 
+  ggplot(aes(x = depart_month, y = n, fill=case_category)) +
+  geom_col() +
+  facet_wrap(~departure_country, nrow = 3)
+
+# p3
+
+ggplotly(p3)
+
+```
