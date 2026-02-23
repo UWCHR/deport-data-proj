@@ -197,6 +197,82 @@ figure_2 <-
 
 figure_2
 
+```
+
+```{r}
+
+dat <- sea |>
+  mutate(week = floor_date(apprehension_date, "week", week_start = "Monday")) |>
+    filter(week > "2023-08-28",
+         # week < "2025-06-09"
+         ) |>
+  mutate(criminality = factor(criminality, levels = c(TRUE, FALSE), labels = c("Criminal conviction", "No criminal conviction"))) |>
+  count(criminality, week)
+
+figure_3 <- dat %>% 
+  ggplot(aes(week, n, fill = criminality, group = criminality)) +
+  geom_vline(data = NULL, xintercept = as.Date("2025-01-20"), color = gray(0.2), linetype = "dashed") +
+  annotate("text", x = as.Date("2025-01-20") - days(7), y = max(dat$n)*.75, label = "Trump II\ninauguration", hjust = 1, size = 3.5, color = gray(0.2)) +
+  geom_area(linewidth = 0.8) +
+  scale_y_continuous(labels = scales::comma) +
+  scale_fill_manual(values = c("#0072B2", "#D55E00")) +
+  coord_cartesian(clip = "off") +
+  labs(fill = "", title = "Weekly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by Criminal Conviction Status", x = "", y = "Number of arrests per Week", caption = general_caption) +
+  theme_minimal() +
+  theme(plot.margin = margin(5, 0, 5, 5),
+        plot.title = element_text(margin = margin(0,0,5,0)),
+        plot.subtitle = element_text(margin = margin(0, 0, 10, 0)),
+        axis.title.x = element_blank(),
+        legend.margin = margin(0, 0, 0, 0),
+        legend.position = "bottom",
+        axis.title.y = element_text(margin = margin(0, 15, 0, 0)),
+        strip.text = element_text(hjust = 0, size = 12))
+
+figure_3
+
+```
+
+```{r}
+
+dat <- sea %>% 
+  mutate(month = floor_date(apprehension_date, "month")) %>% 
+  filter(month <= "2025-09-01") %>% 
+  # mutate(criminality = factor(criminality, levels = c(TRUE, FALSE), labels = c("Criminal conviction", "No criminal conviction"))) %>% 
+  count(apprehension_criminality, month)
+
+figure_4 <- dat %>% 
+  ggplot(aes(month, n, fill = apprehension_criminality, group = apprehension_criminality)) +
+  geom_vline(data = NULL, xintercept = as.Date("2025-01-20"), color = gray(0.2), linetype = "dashed") +
+  annotate("text", x = as.Date("2025-01-20") - days(7), y = max(dat$n)*1.25, label = "Trump II\ninauguration", hjust = 1, size = 3.5, color = gray(0.2)) +
+  geom_area(linewidth = 0.8) +
+  scale_y_continuous(labels = scales::comma) +
+  scale_fill_viridis_d() +
+  coord_cartesian(clip = "off") +
+  labs(fill = "", title = "Monthly arrests by Immigration and Customs Enforcement (ICE)", subtitle = "by Criminal Conviction Status", x = "", y = "Number of arrests per Month", caption = general_caption) +
+  theme_minimal() +
+  theme(plot.margin = margin(5, 0, 5, 5),
+        plot.title = element_text(margin = margin(0,0,5,0)),
+        plot.subtitle = element_text(margin = margin(0, 0, 10, 0)),
+        axis.title.x = element_blank(),
+        legend.margin = margin(0, 0, 0, 0),
+        legend.position = "bottom",
+        axis.title.y = element_text(margin = margin(0, 15, 0, 0)),
+        strip.text = element_text(hjust = 0, size = 12))
+
+figure_4
+
+dat_out <- sea %>% 
+  mutate(month = floor_date(apprehension_date, "month")) %>% 
+  filter(month <= "2025-09-01") %>% 
+  # mutate(criminality = factor(criminality, levels = c(TRUE, FALSE), labels = c("Criminal conviction", "No criminal conviction"))) %>% 
+  count(apprehension_criminality, month, apprehension_state)
+
+write_delim(dat_out, "sea_crim_state_month.csv", delim=",")
+
+```
+
+```{r}
+
 
 pre_post_mean <- sea |>
     filter(week > "2023-08-28",
@@ -1015,6 +1091,27 @@ p1 <- dat %>%
   labs(title = "Seattle AOR arrests resulting in detention",
        subtitle = "First detention facility",
        caption = general_caption)
+
+p1
+
+```
+
+```{r}
+
+dat_2 <- detention_df %>% 
+  filter(unique_identifier %in% sea_arrests$unique_identifier,
+         placement_count == 1,
+         book_in_date_time >= "2024-09-01") %>% 
+  mutate(trump = book_in_date_time >= "2025-01-20",
+         month = floor_date(book_in_date_time, "month")) %>% 
+  mutate(detention_facility = case_when(detention_facility %in% head(top_facil$detention_facility, 6) ~ detention_facility,
+         TRUE ~ "ALL OTHERS")) %>% 
+  count(trump, detention_facility, final_program)
+
+p1 <- dat_2 %>% 
+  ggplot(aes(y = detention_facility, x = n, fill = final_program)) +
+  geom_col() +
+  facet_wrap(~trump, nrow = 2)
 
 p1
 
