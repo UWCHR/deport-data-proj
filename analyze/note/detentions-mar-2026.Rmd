@@ -1,0 +1,380 @@
+---
+title: "ICE ERO-LESA detention data Oct. 2022 - Mar. 2026"
+author: "UWCHR"
+date: "2026-04-01"
+output:
+    html_document:
+        html_preview: true
+        toc: true
+        toc_depth: 3
+        toc_float: true
+        code_folding: hide
+---
+
+
+```{r setup, message=FALSE, warning=FALSE, include=TRUE}
+
+options(scipen = 1000000)
+
+library(pacman)
+
+p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, digest, ggsankeyfier)
+
+arrests <- arrow::read_parquet("https://github.com/deportationdata/ice/raw/refs/heads/main/data/arrests-latest.parquet")
+
+detentions <- arrow::read_parquet("https://github.com/deportationdata/ice/raw/refs/heads/main/data/detention-stints-latest.parquet")
+
+headcount <- arrow::read_parquet("https://github.com/deportationdata/ice/raw/refs/heads/main/data/facilities-daily-population-latest.parquet")
+
+pnw_facil <- c("FDLHOLD",
+"HAVMCWA",
+"RICHOLD",
+"SPOHOLD",
+"STJMCWA",
+"TACGHWA",
+"WNTHOLD",
+"ABRDNWA",
+"ADAMSWA",
+"BLHHOLD",
+"BENTOWA",
+"CHELAWA",
+"CLJUVWA",
+"CLARKWA",
+"COWLIWA",
+"COWJVWA",
+"ECOLOWA",
+"FERRYWA",
+"FORKSWA",
+"FRANKWA",
+"GRANTWA",
+"KINCOWA",
+"KITTIWA",
+"MARTIWA",
+"MASONWA",
+"WAMCNEI",
+"CSCNWWA",
+"OKANOWA",
+"PENDOWA",
+"RRFINWA",
+"REGJCWA",
+"BOPSET",
+"SEAICDF",
+"SEAHOLD",
+"SPOKAWA",
+"STEVEWA",
+"SUNNYWA",
+"THURSWA",
+"WHICOWA",
+"YIKIMWA",
+"YAKHOLD",
+"MEDHOLD",
+"POOHOLD",
+"EUGHOLD")
+
+```
+
+```{r detain_setup}
+
+max_date <- max(detentions$book_in_date_time, na.rm=TRUE)
+
+detentions <- detentions %>% 
+  filter(!is.na(stay_book_in_date_time),
+         !is.na(book_in_date_time)) %>% 
+  mutate(stay_length = difftime(stay_book_out_date_time,
+            stay_book_in_date_time, unit='days'),
+         placement_length = difftime(book_out_date_time,
+            book_in_date_time, unit='days'),
+         stay_length_elapsed = difftime(replace_na(stay_book_out_date_time, max_date),
+            stay_book_in_date_time, unit='days'),
+         placement_length_elapsed = difftime(replace_na(book_out_date_time, max_date),
+            book_in_date_time, unit='days'),
+         initial_placement_exact = stay_book_in_date_time == book_in_date_time,
+         initial_placement_approx = date(stay_book_in_date_time) == date(book_in_date_time)
+         )
+
+detentions <- detentions %>% 
+  filter(!is.na(unique_identifier)) %>% 
+  group_by(unique_identifier) %>% 
+  arrange(stay_book_in_date_time, book_in_date_time) %>%
+  mutate(total_stays = n_distinct(stay_book_in_date_time),
+         total_placements = n(),
+         current_stay = is.na(stay_book_out_date_time),
+         current_placement = is.na(book_out_date_time),
+         stay_count = data.table::rleid(stay_book_in_date_time)) %>% 
+  ungroup()
+
+detentions <- detentions %>% 
+  group_by(stay_ID) %>% 
+  arrange(stay_book_in_date_time, book_in_date_time) %>%
+  mutate(placement_count = data.table::rleid(stint_ID),
+         stay_placements = n(),
+         first_facil = detention_facility_code[[1]], 
+         last_facil = detention_facility_code[[length(detention_facility_code)]],
+         prev_facil = lag(detention_facility_code, n=1),
+         next_facil = lead(detention_facility_code, n=1),
+         longest_placement_facil = detention_facility_code[which.max(placement_length_elapsed)],
+         last_placement = placement_count == stay_placements,
+         longest_placement = placement_length_elapsed == max(placement_length_elapsed)
+         ) %>% 
+  ungroup()
+
+```
+
+```{r headcount}
+
+cscnwwa_headcount <- headcount %>% 
+  filter(detention_facility_code == "CSCNWWA")
+
+p1 <- cscnwwa_headcount %>% 
+  ggplot(aes(x = date, y = n_detained)) +
+  geom_line()
+
+p1
+
+```
+
+```{r sea_aor_daily_arrests}
+
+sea_daily_arrests <- arrests %>% 
+  filter(apprehension_aor == "Seattle Area of Responsibility") %>% 
+  count(apprehension_date)
+
+p1 <- sea_daily_arrests %>% 
+  ggplot(aes(x = apprehension_date, y = n)) +
+  geom_line()
+
+p1
+
+```
+
+```{r cscnwwa_book_ins}
+
+cscnwwa_detentions <- detentions %>% 
+  filter(detention_facility_code == "CSCNWWA")
+
+cscnwwa_book_ins <- cscnwwa_detentions %>% 
+  mutate(date = as.Date(book_in_date_time)) %>% 
+  count(date) %>% 
+  mutate(type = "bookins")
+
+p1 <- cscnwwa_book_ins %>% 
+  ggplot(aes(x = date, y = n)) +
+  geom_line()
+
+p1
+
+```
+
+```{r cscnwwa_book_outs}
+
+cscnwwa_book_outs <- cscnwwa_detentions %>% 
+  mutate(date = as.Date(book_out_date_time)) %>% 
+  filter(!is.na(date)) %>% 
+  count(date) %>% 
+  mutate(type = "bookouts")
+
+p1 <- cscnwwa_book_outs %>% 
+  ggplot(aes(x = date, y = n)) +
+  geom_line()
+
+p1
+
+```
+
+```{r compare_book_ins_book_outs}
+
+dat <- rbind(cscnwwa_book_ins, cscnwwa_book_outs)
+
+p1 <- ggplot(dat, aes(x = date, y = n, color = type)) +
+  geom_line()
+
+p1
+
+dat_wide <- pivot_wider(dat , id_cols = "date", names_from = "type", values_from = "n")
+
+dat_wide[is.na(dat_wide)] <- 0
+
+dat_wide$diff = dat_wide$bookins - dat_wide$bookouts
+
+p2 <- ggplot(dat_wide, aes(x = date, y = diff)) +
+  geom_line()
+
+p2
+
+```
+
+```{r}
+
+cscnwwa_detentions <- cscnwwa_detentions %>% 
+  mutate(book_in_week = floor_date(book_in_date_time, unit = "week", week_start = "Monday"),
+    book_out_week = floor_date(book_out_date_time, unit = "week", week_start = "Monday"),
+    book_in_month = floor_date(book_in_date_time, unit = "month"),
+    book_out_month = floor_date(book_out_date_time, unit = "month"))
+
+dat <- cscnwwa_detentions %>% 
+  count(book_out_month, detention_release_reason)
+
+p1 <- dat %>% 
+  ggplot(aes(x = book_out_month, y = n, fill = detention_release_reason)) +
+  geom_col()
+
+ggplotly(p1)
+
+dat <- cscnwwa_detentions %>% 
+  count(book_out_month, next_facil)
+
+p1 <- dat %>% 
+  ggplot(aes(x = book_out_month, y = n, fill = next_facil)) +
+  geom_col()
+
+ggplotly(p1)
+
+dat <- cscnwwa_detentions %>% 
+  filter(detention_release_reason == "Transferred") %>% 
+  count(book_out_month, next_facil)
+
+p1 <- dat %>% 
+  ggplot(aes(x = book_out_month, y = n, fill = next_facil)) +
+  geom_col()
+
+ggplotly(p1)
+
+```
+
+```{r}
+
+pnw_facil_bookins <- detentions %>% 
+  filter(detention_facility_code %in% pnw_facil) %>% 
+  mutate(book_in_week = floor_date(book_in_date_time, unit = "week", week_start = "Monday"),
+    book_out_week = floor_date(book_out_date_time, unit = "week", week_start = "Monday"),
+    book_in_month = floor_date(book_in_date_time, unit = "month"),
+    book_out_month = floor_date(book_out_date_time, unit = "month"))
+
+dat <- pnw_facil_bookins %>% 
+  filter(placement_count == 1) %>% 
+  count(book_in_month, detention_facility_code)
+
+p1 <- dat %>% 
+  filter(book_in_month >= "2024-12-01") %>% 
+  ggplot(aes(x = book_in_month, y = n, fill = detention_facility_code)) +
+  geom_col(position="stack")
+
+p1
+
+```
+
+
+```{r}
+
+spo_detentions <- detentions %>% 
+  filter(detention_facility_code == "SPOHOLD",
+         placement_count == 1) %>% 
+  mutate(book_in_week = floor_date(book_in_date_time, unit = "week", week_start = "Monday"),
+    book_out_week = floor_date(book_out_date_time, unit = "week", week_start = "Monday"),
+    book_in_month = floor_date(book_in_date_time, unit = "month"),
+    book_out_month = floor_date(book_out_date_time, unit = "month"))
+
+dat <- spo_detentions %>% 
+  count(book_in_month, citizenship_country)
+
+p1 <- dat %>% 
+  ggplot(aes(x = book_in_month, y = n, fill = citizenship_country)) +
+  geom_col(position="stack")
+
+ggplotly(p1)
+
+```
+
+```{r}
+
+arrests <- arrests %>% 
+  filter(apprehension_date <= "2026-03-31") %>% 
+  mutate(arrest_with_detention_history = unique_identifier %in% unique(detentions$unique_identifier),
+         month = floor_date(apprehension_date, unit="month"))
+
+dat <- arrests %>% 
+  count(month, arrest_with_detention_history)
+
+p1 <- dat %>% 
+  ggplot(aes(x = month, y = n, color = arrest_with_detention_history)) +
+  geom_line()
+
+p1
+
+dat <- arrests %>% 
+  mutate(apprehension_aor = str_replace(apprehension_aor, " Area of Responsibility", "")) %>% 
+  count(month, arrest_with_detention_history, apprehension_aor)
+
+p2 <- dat %>% 
+  ggplot(aes(x = month, y = n, color = arrest_with_detention_history)) +
+  geom_line() +
+  facet_wrap(~apprehension_aor)
+
+p2
+
+
+p2 <- dat %>% 
+  filter(apprehension_aor %in% c("Seattle", "San Francisco")) %>% 
+  ggplot(aes(x = month, y = n, color = arrest_with_detention_history)) +
+  geom_line() +
+  facet_wrap(~apprehension_aor)
+
+p2
+```
+
+
+```{r}
+
+url <- "https://drive.usercontent.google.com/download?id=1XAOS7t3ijImVXQ9G7l6xdCr_rBh8i4cz&export=download&authuser=0&confirm=t&uuid=0c4a4b74-5e5f-4f00-8c8a-eb00a56708f9&at=APcXIO3JvUiU3ilszJZ3EAuIE01Y:1772065031530"
+f <- tempfile(fileext = ".csv.gz")
+download.file(url, f, mode = "wb")
+
+uwchr <- read.delim(f, sep='|')
+
+uwchr <- uwchr %>% 
+  mutate(arrest_date = mdy(arrest_date),
+    fy = as.numeric(substr(quarter(arrest_date, fiscal_start = 10, with_year = TRUE), 0, 4)))
+
+ddp_arrests <- arrests %>% 
+  mutate(fy = as.numeric(substr(quarter(apprehension_date, fiscal_start = 10, with_year = TRUE), 0, 4)))
+
+dat1 <- uwchr %>% 
+  rename(apprehension_method = arrest_method) %>% 
+  mutate(apprehension_method = case_when(
+    str_detect(apprehension_method, "CAP") ~ "Custodial Arrest",
+    apprehension_method == "Criminal Alien Program" ~ "Custodial Arrest",
+    apprehension_method == "Custodial Arrest" ~ "Custodial Arrest",
+    apprehension_method == "287(g) Program" ~ "287(g) Program",
+    apprehension_method == "Non-Custodial Arrest" ~ "Non-Custodial Arrest",
+    apprehension_method == "Located" ~ "Non-Custodial Arrest",
+    apprehension_method == "Worksite Enforcement" ~ "Non-Custodial Arrest",
+    apprehension_method == "ERO Reprocessed Arrest" ~ "ERO Reprocessed Arrest",
+    TRUE ~ "All other methods"
+  )) %>% 
+  count(apprehension_method, fy) %>% 
+  mutate(source = "UWCHR")
+
+dat2 <- ddp_arrests %>% 
+    mutate(apprehension_method = case_when(
+    str_detect(apprehension_method, "CAP") ~ "Custodial Arrest",
+    apprehension_method == "Criminal Alien Program" ~ "Custodial Arrest",
+    apprehension_method == "Custodial Arrest" ~ "Custodial Arrest",
+    apprehension_method == "287(g) Program" ~ "287(g) Program",
+    apprehension_method == "Non-Custodial Arrest" ~ "Non-Custodial Arrest",
+    apprehension_method == "Located" ~ "Located",
+    apprehension_method == "Worksite Enforcement" ~ "Non-Custodial Arrest",
+    apprehension_method == "ERO Reprocessed Arrest" ~ "ERO Reprocessed Arrest",
+    TRUE ~ "All other methods"
+  )) %>% 
+  count(apprehension_method, fy) %>% 
+  mutate(source = "DDP")
+
+dat <- rbind(dat1, dat2)
+
+p1 <- dat %>%
+  ggplot(aes(x = fy, y = n, fill = apprehension_method )) +
+  geom_col()
+
+p1
+
+```

@@ -1,0 +1,281 @@
+---
+title: "ICE I-213 analysis 2022-2025"
+author: "UWCHR"
+date: "2026-02-18"
+output:
+    html_document:
+        html_preview: true
+        toc: true
+        toc_depth: 3
+        toc_float: true
+        code_folding: hide
+---
+
+```{r setup, message=FALSE, warning=FALSE, include=TRUE}
+
+options(scipen = 1000000)
+options(ggplot2.continuous.colour = "viridis")
+options(ggplot2.continuous.fill = "viridis")
+options(ggplot2.discrete.colour = "viridis")
+options(ggplot2.discrete.fill = "viridis")
+
+library(pacman)
+
+p_load(here, tidyverse, zoo, scales, lubridate, ggplot2, plotly, gghighlight, viridis, ggmap, tidygeocoder, sf, rnaturalearth)
+
+every_nth = function(n) {
+  return(function(x) {x[c(TRUE, rep(FALSE, n - 1))]})
+}
+
+every_2nd_nth = function(n) {
+  return(function(x) {x[c(FALSE, rep(TRUE, n - 1))]})
+}
+
+```
+
+
+```{r load_data, message=FALSE, warning=FALSE, include=TRUE}
+
+arrests <- arrow::read_parquet(
+  "https://github.com/deportationdata/ice/raw/refs/heads/main/data/arrests-latest.parquet"
+)
+
+arrests <- arrests %>% 
+  mutate(apprehension_date = as.Date(apprehension_date),
+         final_order_date = as.Date(final_order_date)) |>
+  mutate(apprehension_method = fct(apprehension_method)) |>
+  mutate(criminality = apprehension_criminality == "1 Convicted Criminal") |>
+  mutate(n_dupe = row_number(), .by = c("apprehension_date", "apprehension_method", "apprehension_criminality", "unique_identifier")) |>
+  filter(is.na(unique_identifier) | n_dupe == 1) |>
+  mutate(apprehension_aor = str_replace(apprehension_aor, " Area of Responsibility", ""),
+         week = floor_date(apprehension_date, "week", week_start = "Monday"),
+         month = floor_date(apprehension_date, "month"),
+         cy_quarter = as.factor(quarter(apprehension_date, fiscal_start = 1, with_year=TRUE)),
+         fy_quarter = as.factor(quarter(apprehension_date, fiscal_start = 10, with_year=TRUE)),
+         fy = substr(quarter(apprehension_date, fiscal_start = 10, with_year = TRUE), 0, 4),,
+         cy = year(apprehension_date)
+         )
+
+stints <- arrow::read_parquet(
+  "https://github.com/deportationdata/ice/raw/refs/heads/main/data/detention-stints-latest.parquet"
+)
+
+```
+
+
+```{r}
+
+dat <- arrests %>% 
+  count(month, apprehension_aor)
+
+p1 <- dat %>% 
+  filter(month >= "2025-01-01",
+        month <= "2026-03-01") %>% 
+  ggplot(aes(x = month, y = n, color = apprehension_aor, group=apprehension_aor)) +
+  geom_line()
+
+p1
+
+p2 <- dat %>% 
+  filter(month >= "2025-01-01",
+        month <= "2026-03-01") %>% 
+  ggplot(aes(x = month, y = n, color = apprehension_aor, group=apprehension_aor)) +
+  geom_line() +
+  gghighlight(apprehension_aor == "Seattle")
+
+p2
+
+p2 <- dat %>% 
+  filter(month >= "2025-01-01",
+        month <= "2026-03-01") %>% 
+  ggplot(aes(x = month, y = n, color = apprehension_aor, group=apprehension_aor)) +
+  geom_line() +
+  facet_wrap(~apprehension_aor)
+
+p2
+
+```
+
+```{r}
+
+dat <- arrests %>% 
+  filter(apprehension_aor == "Seattle") %>% 
+  mutate(apprehension_state = case_when(apprehension_state %in% c("ALASKA", "OREGON", "WASHINGTON") ~ apprehension_state,
+                                        is.na(apprehension_state) ~ NA_character_,
+                                        TRUE ~ "ALL OTHERS"
+                                        )) %>% 
+  count(month, apprehension_state)
+
+p1 <- dat %>% 
+  filter(
+    month >= "2025-01-01",
+        month <= "2026-03-01") %>% 
+  ggplot(aes(x = month, y = n, color = apprehension_state, group=apprehension_state)) +
+  geom_line()
+
+p1
+
+```
+
+```{r}
+
+arrests <- arrests %>% 
+  mutate(arrest_w_detention = unique_identifier %in% unique(stints$unique_identifier))
+
+dat <- arrests %>% 
+  filter(apprehension_date <= "2026-02-28") %>% 
+  # filter(apprehension_aor == "Seattle") %>% 
+  count(month, arrest_w_detention, apprehension_aor)
+
+p1 <- dat %>% 
+  ggplot(aes(x = month, y = n, color = arrest_w_detention)) +
+  geom_line() +
+  facet_wrap(~apprehension_aor)
+
+p1
+
+```
+
+
+```{r}
+
+wa_facil <- c("FDLHOLD",
+"HAVMCWA",
+"RICHOLD",
+"SPOHOLD",
+"STJMCWA",
+"TACGHWA",
+"WNTHOLD",
+"ABRDNWA",
+"ADAMSWA",
+"BLHHOLD",
+"BENTOWA",
+"CHELAWA",
+"CLJUVWA",
+"CLARKWA",
+"COWLIWA",
+"COWJVWA",
+"ECOLOWA",
+"FERRYWA",
+"FORKSWA",
+"FRANKWA",
+"GRANTWA",
+"KINCOWA",
+"KITTIWA",
+"MARTIWA",
+"MASONWA",
+"WAMCNEI",
+"CSCNWWA",
+"OKANOWA",
+"PENDOWA",
+"RRFINWA",
+"REGJCWA",
+"BOPSET",
+"SEAICDF",
+"SEAHOLD",
+"SPOKAWA",
+"STEVEWA",
+"SUNNYWA",
+"THURSWA",
+"WHICOWA",
+"YIKIMWA",
+"YAKHOLD")
+
+# wa_facil_names <- stints %>% filter(detention_facility_code %in% wa_facil) %>% dplyr::select(detention_facility) %>% distinct()
+
+sea_bookins <- stints %>% 
+  filter(book_in_aor == "Seattle Area of Responsibility",
+         book_in_date_time >= "2025-01-01") %>% 
+  distinct(stay_ID, .keep_all = TRUE)
+
+dat <- sea_bookins %>% 
+  mutate(month = floor_date(book_in_date_time, "month")) %>% 
+  count(month, detention_facility)
+
+p1 <- dat %>% 
+  ggplot(aes(x = month, y = n, fill = detention_facility)) +
+  geom_col()
+
+ggplotly(p1)
+
+dat <- sea_bookins %>% 
+  mutate(month = floor_date(book_in_date_time, "month")) %>% 
+  count(month, final_program)
+
+p2 <- dat %>% 
+  ggplot(aes(x = month, y = n, fill = final_program)) +
+  geom_col()
+
+ggplotly(p2)
+
+```
+
+```{r spohold}
+
+spo_bookins <- sea_bookins %>% 
+  filter(detention_facility_code == "SPOHOLD")
+
+dat <- spo_bookins %>% 
+   mutate(month = floor_date(book_in_date_time, "month")) %>% 
+  count(month, final_program)
+
+p2 <- dat %>% 
+  ggplot(aes(x = month, y = n, fill = final_program)) +
+  geom_col()
+
+ggplotly(p2)
+
+```
+
+```{r yakhold}
+
+yak_bookins <- sea_bookins %>% 
+  filter(detention_facility_code == "YAKHOLD")
+
+dat <- yak_bookins %>% 
+   mutate(month = floor_date(book_in_date_time, "month")) %>% 
+  count(month, final_program)
+
+p2 <- dat %>% 
+  ggplot(aes(x = month, y = n, fill = final_program)) +
+  geom_col()
+
+ggplotly(p2)
+
+```
+
+```{r seahold}
+
+seahold_bookins <- sea_bookins %>% 
+  filter(detention_facility_code == "SEAHOLD")
+
+dat <- seahold_bookins %>% 
+   mutate(month = floor_date(book_in_date_time, "month")) %>% 
+  count(month, final_program)
+
+p2 <- dat %>% 
+  ggplot(aes(x = month, y = n, fill = final_program)) +
+  geom_col()
+
+ggplotly(p2)
+
+```
+
+```{r poohold}
+
+poohold_bookins <- sea_bookins %>% 
+  filter(detention_facility_code == "POOHOLD")
+
+dat <- poohold_bookins %>% 
+   mutate(month = floor_date(book_in_date_time, "month")) %>% 
+  count(month, final_program)
+
+p2 <- dat %>% 
+  ggplot(aes(x = month, y = n, fill = final_program)) +
+  geom_col()
+
+ggplotly(p2)
+
+```
+
+
