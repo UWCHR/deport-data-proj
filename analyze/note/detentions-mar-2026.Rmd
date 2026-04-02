@@ -536,3 +536,54 @@ sea_arrests_bp <- sea_arrests %>%
   filter(str_detect(toa_current_duty_site, "POE|BORDER"))
 
 ```
+
+```{r}
+
+sea_bookins <- detentions %>% 
+  filter(book_in_aor == "Seattle Area of Responsibility",
+         book_in_date_time >= "2025-01-01") %>% 
+  distinct(stay_ID, .keep_all = TRUE)
+
+dat <- sea_bookins %>% 
+  mutate(month = floor_date(book_in_date_time, "month")) %>% 
+  count(month, detention_facility)
+
+p1 <- dat %>% 
+  ggplot(aes(x = month, y = n, fill = detention_facility)) +
+  geom_col()
+
+ggplotly(p1)
+
+dat <- sea_bookins %>% 
+  mutate(month = floor_date(book_in_date_time, "month")) %>% 
+  count(month, final_program)
+
+p2 <- dat %>% 
+  ggplot(aes(x = month, y = n, fill = final_program)) +
+  geom_col()
+
+ggplotly(p2)
+
+```
+
+
+```{r}
+
+# Crude version of stay dataset
+stays <- detentions %>% 
+  distinct(stay_ID, .keep_all =TRUE) %>% 
+  mutate(book_in_week = floor_date(book_in_date_time, unit = "week", week_start = "Monday"),
+    book_out_week = floor_date(book_out_date_time, unit = "week", week_start = "Monday"),
+    book_in_month = floor_date(book_in_date_time, unit = "month"),
+    book_out_month = floor_date(book_out_date_time, unit = "month"))
+
+dat <- stays %>% 
+  count(book_out_month, stay_release_reason)
+
+p1 <- dat %>% 
+  ggplot(aes(x = book_out_month, y = n, fill = stay_release_reason)) +
+  geom_col()
+
+ggplotly(p1)
+
+```

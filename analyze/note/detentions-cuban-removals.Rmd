@@ -151,3 +151,23 @@ p1 <- pop_data %>%
 p1
 
 ```
+
+```{r }
+
+over_60_deport <- df_clean %>% 
+  distinct(unique_identifier, .keep_all=TRUE) %>% 
+  filter(!is.na(birth_year), !is.na(gender), gender %in% c("Male", "Female")) %>%
+    mutate(age = 2026 - birth_year) %>% 
+  filter(age >= 60,
+         !is.na(departure_country))
+
+temp <- over_60_deport %>% 
+  count(citizenship_country, departure_country)
+
+over_60_deport_cuba <- over_60_deport %>% 
+  filter(citizenship_country == "CUBA")
+
+over_60_deport_cuba %>% 
+  count(departure_country)
+
+```

@@ -1,0 +1,249 @@
+---
+title: "Lookup and summary of individual case records across datasets"
+author: "UWCHR"
+date: "2025-07-03"
+output:
+    html_document:
+        html_preview: true
+        toc: true
+        toc_depth: 3
+        toc_float: true
+        code_folding: hide
+---
+
+Note `unique_identifier` values will change for each successive installment.
+
+```{r setup, message=FALSE, warning=FALSE, include=TRUE}
+
+options(scipen = 1000000)
+
+library(pacman)
+
+p_load(here, tidyverse, zoo, lubridate, ggplot2, ggforce, plotly, gghighlight, viridis, readxl, ggVennDiagram)
+
+```
+
+```{r setup_encounters, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Encounters_LESA-STU_FINAL_Redacted_raw.xlsx"
+
+encounter_df_1 <- read_excel(here('analyze', 'input', file), sheet=1, skip=6) %>%
+  janitor::clean_names() %>%
+  mutate(event_date = as.Date(event_date))
+
+encounter_df_2 <- read_excel(here('analyze', 'input', file), sheet=2, skip=6) %>%
+  janitor::clean_names() %>%
+  mutate(event_date = as.Date(event_date))
+
+encounter_df <- rbind(encounter_df_1, encounter_df_2)
+
+rm(encounter_df_1, encounter_df_2)
+
+encounter_ids <- unique(encounter_df$unique_identifier)
+
+```
+
+
+```{r setup_detainers}
+
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Detainers_LESA-STU_FINAL_Redacted_raw.xlsx"
+
+detainer_df<- read_excel(here('analyze', 'input', file), skip=6) %>% 
+  janitor::clean_names()
+
+detainer_df<- detainer_df%>% 
+  mutate(date_diff = difftime(detainer_prepare_date, apprehension_date, units = "days"))
+
+detainer_ids <- unique(detainer_df$unique_identifier)
+
+```
+
+```{r setup_arrests, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "2025-ICLI-00019_2024-ICFO-39357_ERO_Admin_Arrests_LESA-STU_FINAL_Redacted_raw.xlsx"
+
+arrest_df<- read_excel(here('analyze', 'input', file), skip=6) %>% 
+  janitor::clean_names()
+
+arrest_df <- arrest_df %>% 
+  mutate(apprehension_date = as.Date(apprehension_date)) |>
+  mutate(apprehension_method = fct(apprehension_method)) |>
+  mutate(criminality = apprehension_criminality == "1 Convicted Criminal") |>
+  mutate(n_dupe = row_number(), .by = c("unique_identifier")) |>
+  filter(!is.na(unique_identifier))
+
+arrest_ids <- unique(arrest_df$unique_identifier)
+
+```
+
+```{r setup_detention, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "ice_detentions_nov23-jul25.csv.gz"
+
+detention_df <- read_delim(here('analyze', 'input', file), delim='|') %>% 
+  mutate(stay_book_in_date_time = ymd_hms(stay_book_in_date_time),
+         book_in_date_time = ymd_hms(book_in_date_time),
+         detention_book_out_date_time = ymd_hms(detention_book_out_date_time),
+         stay_book_out_date_time = ymd_hms(stay_book_out_date_time),
+         stay_book_out_date = ymd(stay_book_out_date),
+         book_in_fy = substr(quarter(book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4),
+         stay_book_in_fy = substr(quarter(stay_book_in_date_time, fiscal_start = 10, type = "year.quarter"), 1, 4)) %>% filter(!is.na(unique_identifier))
+
+
+detention_df <- detention_df %>% 
+  group_by(unique_identifier) %>% 
+  arrange(stay_book_in_date_time, book_in_date_time, unique_identifier) %>% 
+  ungroup()
+
+detention_ids <- unique(detention_df$unique_identifier)
+
+```
+
+```{r setup_removals, message=FALSE, warning=FALSE, include=TRUE}
+
+file <- "2025-ICLI-00019_2024-ICFO-39357_ICE_Removals07312025.xlsx"
+
+removal_df <- read_excel(here('analyze', 'input', file), skip=6) %>% 
+  janitor::clean_names() %>% filter(!is.na(unique_identifier))
+
+removal_ids <- unique(removal_df$unique_identifier)
+
+```
+
+
+```{r}
+
+id_lookup <- function(unique_identifier, dataset, output = FALSE) {
+  
+  records <- dataset[dataset$unique_identifier == unique_identifier,]
+  
+  if (output == "kable" | output == TRUE) {
+    knitr::kable(records)
+  } else if (output == "df" | output == FALSE) {
+    records
+  } else if (output == "text") {
+      for (n in seq(nrow(records))) {
+        for (i in seq(length(records[n,]))) {
+          print(paste(names(records[n,i]), ": ", records[n,i]))
+        }
+      }
+    }
+  }
+
+```
+
+```{r}
+
+id_lookup("b0d85d7b0ea028f6bd6d8557aa1f2f2fbd047a90", arrest_df, output="text")
+
+```
+
+```{r}
+
+id_lookup("b970c968ba8babd9b92ff3fd739fe30232666d59", encounter_df, output=FALSE)
+
+```
+
+```{r}
+
+datasets <- c(encounter_df, detainer_df, arrest_df, detention_df, removal_df)
+
+lookup_all <- function(lookup_id, datasets) {
+  
+  records <- id_lookup(lookup_id, encounter_df)
+  
+  # for (n in 1:length(datasets)) {
+  #   print(id_lookup(unique_identifier, dataset[n]))
+  # }
+  
+}
+
+temp <- lookup_all("2b523cdad2a0705f5f06c4a1860c606e439c8abe", datasets)
+
+```
+
+```{r shared_cols}
+
+encounter_cols <- names(encounter_df)
+detainer_cols <- names(detainer_df)
+arrest_cols <- names(arrest_df)
+detention_cols <- names(detention_df)
+removal_cols <- names(removal_df)
+
+shared_cols <- Reduce(intersect, list(encounter_cols, detainer_cols, arrest_cols, detention_cols, removal_cols))
+
+```
+
+```{r long_record}
+
+lookup_enforcement <- function(id_to_search) {
+
+  encounter_recs <- encounter_df %>% 
+    mutate(date = as_datetime(event_date),
+           aor = responsible_aor,
+           loc = responsible_site) %>% 
+    filter(unique_identifier == id_to_search) %>% 
+    mutate(type = "encounter") %>% 
+    dplyr::select(unique_identifier, type, date, aor, loc, shared_cols)
+  
+  detainer_recs <- detainer_df %>% 
+    mutate(date = as_datetime(detainer_prepare_date),
+           aor = facility_aor,
+           loc = detention_facility) %>% 
+    filter(unique_identifier == id_to_search) %>% 
+    mutate(type = "detainer") %>% 
+    dplyr::select(unique_identifier, type, date, aor, loc, shared_cols)
+  
+  arrest_recs <- arrest_df %>% 
+    mutate(date = as_datetime(apprehension_date),
+           aor = apprehension_aor,
+           loc = apprehension_state) %>% 
+    filter(unique_identifier == id_to_search) %>% 
+    mutate(type = "arrest") %>% 
+    dplyr::select(unique_identifier, type, date, aor, loc, shared_cols)
+  
+  detention_book_in_recs <- detention_df %>% 
+    mutate(date = as_datetime(book_in_date_time),
+           aor = "",
+           loc = detention_facility) %>% 
+    filter(unique_identifier == id_to_search) %>% 
+    mutate(type = "detention book-in") %>% 
+    dplyr::select(unique_identifier, type, date, aor, loc, shared_cols)
+  
+  detention_book_out_recs <- detention_df %>% 
+    mutate(date = as_datetime(detention_book_out_date_time),
+           aor = "",
+           loc = detention_facility) %>% 
+    filter(unique_identifier == id_to_search) %>% 
+    mutate(type = "detention book-out") %>% 
+    dplyr::select(unique_identifier, type, date, aor, loc, shared_cols)
+  
+  detention_recs <- rbind(detention_book_in_recs, detention_book_out_recs) %>% 
+    arrange(date)
+  
+  removal_recs <- removal_df %>% 
+    mutate(date = as_datetime(departed_date),
+           aor = docket_aor,
+           loc = port_of_departure) %>% 
+    filter(unique_identifier == id_to_search) %>% 
+    mutate(type = "removal") %>% 
+    dplyr::select(unique_identifier, type, date, aor, loc, shared_cols)
+  
+  enforce_history <- rbind(encounter_recs,
+                           detainer_recs,
+                           arrest_recs,
+                           detention_recs,
+                           removal_recs)
+
+  return(enforce_history)
+
+  }
+
+```
+
+```{r}
+
+dat <-lookup_enforcement("b0d85d7b0ea028f6bd6d8557aa1f2f2fbd047a90")
+
+write_delim(dat, here::here('analyze/output/b0d85d7b0ea028f6bd6d8557aa1f2f2fbd047a90.csv'), delim=',')
+```
