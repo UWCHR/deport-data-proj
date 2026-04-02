@@ -112,3 +112,18 @@ p3 <- cscnwwa_transfers_by_type %>%
 ggplotly(p3)
 
 ```
+
+```{r}
+
+p3 <- cscnwwa_transfers_by_type %>% 
+  count(type, departure_country) %>% 
+  ggplot(aes(x = type, y = n, fill = departure_country)) +
+  geom_col(position = "fill")
+
+ggplotly(p3)
+
+erofcb_from_cscnwwa %>% 
+  count(detention_release_reason,departure_country)
+
+
+```
