@@ -181,6 +181,46 @@ p1
 
 ```
 
+```{r}
+
+cscnwwa_detentions <- detentions %>% 
+  filter(detention_facility_code == "CSCNWWA")
+
+cscnwwa_book_ins_weekly <- cscnwwa_detentions %>% 
+  filter(book_in_date_time >= "2022-10-01") %>% 
+  mutate(date = as.Date(book_in_date_time)) %>% 
+  filter(!is.na(date)) %>% 
+  mutate(week = floor_date(date, unit = "week", week_start = 1)) %>% 
+  count(week) %>% 
+  mutate(type = "bookins")
+
+cscnwwa_book_outs_weekly <- cscnwwa_detentions %>% 
+  filter(book_out_date_time >= "2022-10-01") %>% 
+  mutate(date = as.Date(book_out_date_time)) %>% 
+  filter(!is.na(date)) %>% 
+  mutate(week = floor_date(date, unit = "week", week_start = 1)) %>% 
+  count(week) %>% 
+  mutate(type = "bookouts")
+
+dat <- rbind(cscnwwa_book_ins_weekly, cscnwwa_book_outs_weekly)
+
+p1 <- dat %>% 
+  filter(week >= "2025-01-01") %>% 
+  ggplot(aes(x = week, y = n, fill = type)) + 
+  geom_col(position = "dodge")
+
+p1
+
+p2 <- dat %>% 
+  filter(week >= "2025-01-01") %>% 
+  ggplot(aes(x = week, y = n, fill = type)) + 
+  geom_col(position = "stack")
+
+p2
+
+```
+
+
 ```{r compare_book_ins_book_outs}
 
 dat <- rbind(cscnwwa_book_ins, cscnwwa_book_outs)
@@ -285,6 +325,47 @@ ggplotly(p1)
 
 ```
 
+
+```{r}
+
+poohold_detentions <- detentions %>% 
+  filter(detention_facility_code == "POOHOLD")
+
+poohold_book_ins_weekly <- poohold_detentions %>% 
+  filter(book_in_date_time >= "2022-10-01") %>% 
+  mutate(date = as.Date(book_in_date_time)) %>% 
+  filter(!is.na(date)) %>% 
+  mutate(week = floor_date(date, unit = "week", week_start = 1)) %>% 
+  count(week) %>% 
+  mutate(type = "bookins")
+
+poohold_book_outs_weekly <- poohold_detentions %>% 
+  filter(book_out_date_time >= "2022-10-01") %>% 
+  mutate(date = as.Date(book_out_date_time)) %>% 
+  filter(!is.na(date)) %>% 
+  mutate(week = floor_date(date, unit = "week", week_start = 1)) %>% 
+  count(week) %>% 
+  mutate(type = "bookouts")
+
+dat <- rbind(poohold_book_ins_weekly, poohold_book_outs_weekly)
+
+p1 <- dat %>% 
+  filter(week >= "2025-01-01") %>% 
+  ggplot(aes(x = week, y = n, fill = type)) + 
+  geom_col(position = "dodge")
+
+p1
+
+p2 <- dat %>% 
+  filter(week >= "2025-01-01") %>% 
+  ggplot(aes(x = week, y = n, fill = type)) + 
+  geom_col(position = "stack")
+
+p2
+
+```
+
+
 ```{r}
 
 arrests <- arrests %>% 
@@ -333,10 +414,15 @@ uwchr <- read.delim(f, sep='|')
 
 uwchr <- uwchr %>% 
   mutate(arrest_date = mdy(arrest_date),
-    fy = as.numeric(substr(quarter(arrest_date, fiscal_start = 10, with_year = TRUE), 0, 4)))
+    fy = as.numeric(substr(quarter(arrest_date, fiscal_start = 10, with_year = TRUE), 0, 4)),
+    fy_quarter = quarter(arrest_date, fiscal_start = 10, with_year = TRUE),
+    cy_quarter_zoo = as.yearqtr(arrest_date, format = "%Y-%M-%D")) %>% 
+  filter(arrest_date <= "2022-10-01")
 
 ddp_arrests <- arrests %>% 
-  mutate(fy = as.numeric(substr(quarter(apprehension_date, fiscal_start = 10, with_year = TRUE), 0, 4)))
+  mutate(fy = as.numeric(substr(quarter(apprehension_date, fiscal_start = 10, with_year = TRUE), 0, 4)),
+         fy_quarter = quarter(apprehension_date, fiscal_start = 10, with_year = TRUE),
+         cy_quarter_zoo = as.yearqtr(apprehension_date, format = "%Y-%M-%D"))
 
 dat1 <- uwchr %>% 
   rename(apprehension_method = arrest_method) %>% 
@@ -376,5 +462,77 @@ p1 <- dat %>%
   geom_col()
 
 p1
+
+```
+
+```{r}
+
+dat1 <- uwchr %>% 
+  filter(area_of_responsibility == "Seattle Area of Responsibility") %>% 
+  rename(apprehension_method = arrest_method) %>% 
+  mutate(apprehension_method = case_when(
+    str_detect(apprehension_method, "CAP") ~ "Custodial Arrest",
+    apprehension_method == "Criminal Alien Program" ~ "Custodial Arrest",
+    apprehension_method == "Custodial Arrest" ~ "Custodial Arrest",
+    apprehension_method == "287(g) Program" ~ "287(g) Program",
+    apprehension_method == "Non-Custodial Arrest" ~ "Non-Custodial Arrest",
+    apprehension_method == "Located" ~ "Non-Custodial Arrest",
+    apprehension_method == "Worksite Enforcement" ~ "Non-Custodial Arrest",
+    apprehension_method == "ERO Reprocessed Arrest" ~ "ERO Reprocessed Arrest",
+    TRUE ~ "All other methods"
+  )) %>% 
+  count(apprehension_method, cy_quarter_zoo) %>% 
+  mutate(source = "UWCHR")
+
+dat2 <- ddp_arrests %>% 
+  filter(apprehension_aor == "Seattle Area of Responsibility") %>% 
+    mutate(apprehension_method = case_when(
+    str_detect(apprehension_method, "CAP") ~ "Custodial Arrest",
+    apprehension_method == "Criminal Alien Program" ~ "Custodial Arrest",
+    apprehension_method == "Custodial Arrest" ~ "Custodial Arrest",
+    apprehension_method == "287(g) Program" ~ "287(g) Program",
+    apprehension_method == "Non-Custodial Arrest" ~ "Non-Custodial Arrest",
+    apprehension_method == "Located" ~ "Located",
+    apprehension_method == "Worksite Enforcement" ~ "Non-Custodial Arrest",
+    apprehension_method == "ERO Reprocessed Arrest" ~ "ERO Reprocessed Arrest",
+    TRUE ~ "All other methods"
+  )) %>% 
+  count(apprehension_method, cy_quarter_zoo) %>% 
+  mutate(source = "DDP")
+
+dat <- rbind(dat1, dat2)
+
+p1 <- dat %>%
+  ggplot(aes(x = cy_quarter_zoo, y = n, fill = apprehension_method )) +
+  geom_col()
+
+p1
+
+p2 <- dat %>%
+  ggplot(aes(x = cy_quarter_zoo, y = n, fill = source)) +
+  geom_col()
+
+p2
+
+```
+
+```{r}
+
+sea_arrests <- ddp_arrests %>% 
+  filter(apprehension_aor == "Seattle Area of Responsibility")
+
+dat <- sea_arrests %>% 
+  mutate(cy_quarter_zoo = as.yearqtr(apprehension_date, format = "%Y-%M-%D")) %>% 
+  count(cy_quarter_zoo, toa_current_duty_site)
+
+p1 <- dat %>% 
+  ggplot(aes(x = cy_quarter_zoo, y = n, fill = toa_current_duty_site)) +
+  geom_col()
+
+ggplotly(p1)
+
+# Some of these look wonky
+sea_arrests_bp <- sea_arrests %>% 
+  filter(str_detect(toa_current_duty_site, "POE|BORDER"))
 
 ```
