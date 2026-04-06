@@ -1,0 +1,145 @@
+---
+title: "ICE ERO-LESA detention data Oct. 2022 - Mar. 2026"
+author: "UWCHR"
+date: "2026-04-01"
+output:
+    html_document:
+        html_preview: true
+        toc: true
+        toc_depth: 3
+        toc_float: true
+        code_folding: hide
+---
+
+
+```{r setup, message=FALSE, warning=FALSE, include=TRUE}
+
+options(scipen = 1000000)
+
+library(pacman)
+
+p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, digest, ggsankeyfier)
+
+# arrests <- arrow::read_parquet("https://github.com/deportationdata/ice/raw/refs/heads/main/data/arrests-latest.parquet")
+
+# detentions <- arrow::read_parquet("https://github.com/deportationdata/ice/raw/refs/heads/main/data/detention-stints-latest.parquet")
+
+stays <- arrow::read_parquet("https://github.com/deportationdata/ice/raw/refs/heads/main/data/detention-stays-latest.parquet")
+
+# headcount <- arrow::read_parquet("https://github.com/deportationdata/ice/raw/refs/heads/main/data/facilities-daily-population-latest.parquet")
+
+pnw_facil <- c("FDLHOLD",
+"HAVMCWA",
+"RICHOLD",
+"SPOHOLD",
+"STJMCWA",
+"TACGHWA",
+"WNTHOLD",
+"ABRDNWA",
+"ADAMSWA",
+"BLHHOLD",
+"BENTOWA",
+"CHELAWA",
+"CLJUVWA",
+"CLARKWA",
+"COWLIWA",
+"COWJVWA",
+"ECOLOWA",
+"FERRYWA",
+"FORKSWA",
+"FRANKWA",
+"GRANTWA",
+"KINCOWA",
+"KITTIWA",
+"MARTIWA",
+"MASONWA",
+"WAMCNEI",
+"CSCNWWA",
+"OKANOWA",
+"PENDOWA",
+"RRFINWA",
+"REGJCWA",
+"BOPSET",
+"SEAICDF",
+"SEAHOLD",
+"SPOKAWA",
+"STEVEWA",
+"SUNNYWA",
+"THURSWA",
+"WHICOWA",
+"YIKIMWA",
+"YAKHOLD",
+"MEDHOLD",
+"POOHOLD",
+"EUGHOLD")
+
+```
+
+```{r}
+
+stays <- stays %>% 
+  mutate(stays_inc_cscnwwa = str_detect(detention_facility_codes_all, "CSCNWWA"),
+         stays_inc_erofcb = str_detect(detention_facility_codes_all, "EROFCB"),
+         stays_inc_pnw_facil = str_detect(detention_facility_codes_all, paste(pnw_facil, collapse="|")))
+
+```
+
+`book_in_aor` doesn't make sense
+
+```{r}
+
+cscnwwa_stays <- stays %>% 
+  filter(stays_inc_cscnwwa == TRUE)
+
+dat <- cscnwwa_stays %>% 
+  count(book_in_aor, stays_inc_erofcb)
+
+p1 <- dat %>% 
+  ggplot(aes(x = stays_inc_erofcb, y = n, fill = book_in_aor)) +
+  geom_col(position="fill")
+
+ggplotly(p1)
+
+```
+
+```{r}
+
+cscnwwa_stays <- stays %>% 
+  filter(stays_inc_cscnwwa == TRUE)
+
+dat <- cscnwwa_stays %>% 
+  count(stay_release_reason, stays_inc_erofcb)
+
+p1 <- dat %>% 
+  ggplot(aes(x = stays_inc_erofcb, y = n, fill = stay_release_reason)) +
+  geom_col(position="fill")
+
+ggplotly(p1)
+
+```
+
+
+```{r}
+
+cscnwwa_stays <- stays %>% 
+  filter(stays_inc_cscnwwa == TRUE)
+
+dat <- cscnwwa_stays %>% 
+  count(citizenship_country, stays_inc_erofcb)
+
+p1 <- dat %>% 
+  ggplot(aes(x = stays_inc_erofcb, y = n, fill = citizenship_country)) +
+  geom_col(position="fill")
+
+ggplotly(p1)
+
+```
+
+```{r}
+
+cscnwwa_stays <- stays %>% 
+  filter(stays_inc_cscnwwa == TRUE)
+
+
+
+```
