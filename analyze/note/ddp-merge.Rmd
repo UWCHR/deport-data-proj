@@ -1,0 +1,210 @@
+---
+title: "DDP merge"
+author: "UWCHR"
+date: "2026-04-08"
+output:
+    html_document:
+        html_preview: true
+        toc: true
+        toc_depth: 3
+        toc_float: true
+        code_folding: hide
+---
+
+```{r}
+
+library(tidyverse)
+
+detention_stays <- arrow::read_parquet(
+  "https://github.com/deportationdata/ice/raw/refs/heads/main/data/detention-stays-latest.parquet"
+)
+detention_stints <- arrow::read_parquet(
+  "https://github.com/deportationdata/ice/raw/refs/heads/main/data/detention-stints-latest.parquet"
+)
+arrests <- arrow::read_parquet(
+  "https://github.com/deportationdata/ice/raw/refs/heads/main/data/arrests-latest.parquet"
+)
+
+removals <- arrow::read_feather(
+  "~/git/ice/data/removals-latest.feather"
+)
+
+detention_arrest_join <-
+  detention_stays |>
+  select(stay_ID, unique_identifier, stay_book_in_date_time) |>
+  left_join(
+    arrests |>
+      filter(!is.na(unique_identifier)) |>
+      mutate(
+        reprocessed_record = apprehension_method == "ERO Reprocessed Arrest"
+      ) |>
+      arrange(unique_identifier, reprocessed_record, apprehension_date_time) |>
+      mutate(
+        new_episode = is.na(lag(apprehension_date_time)) |
+          difftime(
+            apprehension_date_time,
+            lag(apprehension_date_time),
+            units = "hours"
+          ) >
+            24,
+        episode_id = cumsum(new_episode),
+        .by = "unique_identifier"
+      ) |>
+      # keep the last arrest in each <=24h-connected episode
+      filter(row_number() == 1, .by = c("unique_identifier", "episode_id")) |>
+      # if any episodes still have exact timestamp duplicates, keep one
+      filter(
+        row_number() == 1,
+        .by = c("unique_identifier", "episode_id", "apprehension_date_time")
+      ) |>
+      select(-new_episode, -episode_id) |>
+      select(
+        unique_identifier,
+        apprehension_date_time_arrest = apprehension_date_time,
+        apprehension_criminality,
+        apprehension_method,
+        apprehension_aor,
+        file_original_arrest = file_original,
+        row_original_arrest = row_original,
+        sheet_original_arrest = sheet_original
+      ),
+    by = "unique_identifier",
+    relationship = "many-to-many"
+  ) |>
+  mutate(
+    time_diff = as.numeric(difftime(
+      stay_book_in_date_time,
+      apprehension_date_time_arrest,
+      units = "hours"
+    ))
+  ) |>
+  group_by(stay_ID) |>
+  filter(time_diff <= 24 * 10, time_diff >= 24 * -5) |>
+  slice_min(order_by = abs(time_diff), n = 1, with_ties = FALSE) |>
+  ungroup() |>
+  select(-time_diff, -stay_book_in_date_time, -unique_identifier)
+
+detention_removal_join <-
+  detention_stays |>
+  select(
+    stay_ID,
+    unique_identifier,
+    stay_book_out_date_time,
+    departed_date,
+    departure_country
+  ) |>
+  # candidate 1: departed_date from the stay record itself
+  mutate(
+    departed_date_stay = departed_date,
+    departure_country_stay = departure_country
+  ) |>
+  select(-departed_date, -departure_country) |>
+  # candidate 2: departed_date from the removals file
+  left_join(
+    removals |>
+      filter(!is.na(unique_identifier)) |>
+      select(
+        unique_identifier,
+        departed_date_removal = departed_date,
+        departure_country_removal = departure_country
+      ),
+    by = "unique_identifier",
+    relationship = "many-to-many"
+  ) |>
+  # stack both candidates per stay
+  pivot_longer(
+    cols = c(departed_date_stay, departed_date_removal),
+    names_to = "source",
+    values_to = "departed_date_candidate",
+    values_drop_na = TRUE
+  ) |>
+  mutate(
+    departure_country = if_else(
+      source == "departed_date_stay",
+      departure_country_stay,
+      departure_country_removal
+    )
+  ) |>
+  select(-departure_country_stay, -departure_country_removal) |>
+  mutate(
+    time_diff = as.numeric(difftime(
+      departed_date_candidate,
+      stay_book_out_date_time,
+      units = "days"
+    ))
+  ) |>
+  filter(time_diff >= -5, time_diff <= 10) |>
+  slice_min(
+    order_by = abs(time_diff),
+    n = 1,
+    with_ties = FALSE,
+    by = stay_ID
+  ) |>
+  select(
+    stay_ID,
+    departed_date_removal = departed_date_candidate,
+    departure_country
+  )
+
+detention_stays <-
+  detention_stays |>
+  mutate(
+    border_arrest = final_program %in%
+      c(
+        "Border Patrol",
+        "Inspections - Air",
+        "Inspections - Land",
+        "Inspections - Sea",
+        "Coast Guard"
+      )
+  )
+
+detentions_with_arrests <-
+  detention_stays |>
+  left_join(
+    detention_arrest_join |> mutate(has_arrest = 1),
+    by = "stay_ID",
+    relationship = "one-to-one"
+  ) |>
+  left_join(
+    detention_removal_join |> mutate(has_removal = 1),
+    by = "stay_ID",
+    relationship = "one-to-one"
+  ) |>
+  mutate(
+    has_arrest = if_else(is.na(has_arrest), 0L, has_arrest),
+    has_removal = if_else(is.na(has_removal), 0L, has_removal),
+  ) |>
+  filter(
+    # stay_book_in_date_time >= as.Date("2024-05-01") |
+    #   stay_book_out_date_time >= as.Date("2024-05-01") |
+    #   is.na(stay_book_out_date_time)
+  )
+
+new_facilities <-
+  detention_stints |>
+  # identify all of the facilities used in 2025 or 2026 but not in 2022-2024
+  group_by(detention_facility_code) |>
+  summarize(
+    used_before = any(as.Date(book_in_date_time) < as.Date("2025-01-20")),
+    used_after = any(as.Date(book_in_date_time) >= as.Date("2025-01-20"))
+  ) |>
+  filter(used_after == TRUE, used_before == FALSE) |>
+  pull(detention_facility_code)
+
+detention_stints <-
+  detention_stints |>
+  filter(
+    book_in_date_time >= as.Date("2024-05-01") |
+      book_out_date_time >= as.Date("2024-05-01") |
+      is.na(book_out_date_time)
+  )
+
+rm(
+  detention_stays,
+  arrests,
+  removals,
+  detention_arrest_join,
+  detention_removal_join
+)
+```
