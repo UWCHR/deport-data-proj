@@ -20,7 +20,7 @@ library(pacman)
 
 p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, digest, ggsankeyfier)
 
-# arrests <- arrow::read_parquet("https://github.com/deportationdata/ice/raw/refs/heads/main/data/arrests-latest.parquet")
+arrests <- arrow::read_parquet("https://github.com/deportationdata/ice/raw/refs/heads/main/data/arrests-latest.parquet")
 
 # detentions <- arrow::read_parquet("https://github.com/deportationdata/ice/raw/refs/heads/main/data/detention-stints-latest.parquet")
 
@@ -80,11 +80,12 @@ pnw_facil <- c("FDLHOLD",
 stays <- stays %>% 
   mutate(stays_inc_cscnwwa = str_detect(detention_facility_codes_all, "CSCNWWA"),
          stays_inc_erofcb = str_detect(detention_facility_codes_all, "EROFCB"),
-         stays_inc_pnw_facil = str_detect(detention_facility_codes_all, paste(pnw_facil, collapse="|")))
+         stays_inc_pnw_facil = str_detect(detention_facility_codes_all, paste(pnw_facil, collapse="|")),
+         ice_arrest = unique_identifier %in% arrests$unique_identifier)
 
 ```
 
-`book_in_aor` doesn't make sense
+`book_in_aor` and `book_in_site` aren't simply AOR of first detention facility
 
 ```{r}
 
@@ -99,6 +100,15 @@ p1 <- dat %>%
   geom_col(position="fill")
 
 ggplotly(p1)
+
+pnw_stays <- stays %>% 
+  filter(detention_facility_code_first %in% pnw_facil)
+
+dat1 <- pnw_stays %>% 
+  count(book_in_aor, ice_arrest)
+
+dat2 <- pnw_stays %>% 
+  count(detention_facility_code_first, book_in_site)
 
 ```
 

@@ -787,3 +787,28 @@ p1 <- dat %>%
 ggplotly(p1)
 
 ```
+
+
+```{r}
+
+arrests_with_det <- arrests %>% 
+  filter(unique_identifier %in% detentions$unique_identifier)
+
+dat <- arrests_with_det %>% 
+  filter(apprehension_date >= "2024-07-01") %>% 
+  mutate(week = floor_date(apprehension_date, unit = "week", week_start = "Monday")) %>% 
+  count(week, apprehension_aor)
+
+p1 <- dat %>% 
+  filter(apprehension_aor %in% c("Los Angeles Area of Responsibility",
+                                 "Washington Area of Responsibility",
+                                 "Chicago Area of Responsibility",
+                                 "St. Paul Area of Responsibility",
+                                 "Seattle Area of Responsibility")) %>% 
+  ggplot(aes(x = week, y = n, color = apprehension_aor)) +
+  geom_line() +
+  facet_wrap(~apprehension_aor, ncol =1)
+
+p1
+
+```
