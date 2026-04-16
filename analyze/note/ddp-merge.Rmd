@@ -176,9 +176,9 @@ detentions_with_arrests <-
     has_removal = if_else(is.na(has_removal), 0L, has_removal),
   ) |>
   filter(
-    # stay_book_in_date_time >= as.Date("2024-05-01") |
-    #   stay_book_out_date_time >= as.Date("2024-05-01") |
-    #   is.na(stay_book_out_date_time)
+    stay_book_in_date_time >= as.Date("2024-05-01") |
+      stay_book_out_date_time >= as.Date("2024-05-01") |
+      is.na(stay_book_out_date_time)
   )
 
 new_facilities <-
@@ -200,11 +200,219 @@ detention_stints <-
       is.na(book_out_date_time)
   )
 
-rm(
-  detention_stays,
-  arrests,
-  removals,
-  detention_arrest_join,
-  detention_removal_join
+# rm(
+#   detention_stays,
+#   arrests,
+#   removals,
+#   detention_arrest_join,
+#   detention_removal_join
+# )
+```
+
+```{r arrest_episodes}
+
+arrest_episodes <- arrests |>
+      filter(!is.na(unique_identifier)) |>
+      mutate(
+        reprocessed_record = apprehension_method == "ERO Reprocessed Arrest"
+      ) |>
+      arrange(unique_identifier, reprocessed_record, apprehension_date_time) |>
+      mutate(
+        new_episode = is.na(lag(apprehension_date_time)) |
+          difftime(
+            apprehension_date_time,
+            lag(apprehension_date_time),
+            units = "hours"
+          ) >
+            24,
+        episode_id = cumsum(new_episode),
+        .by = "unique_identifier"
+      )
+
+# This drops ~1000 arrests
+unique_arrest_episodes <- arrest_episodes |>
+      # keep the last arrest in each <=24h-connected episode
+      filter(row_number() == 1, .by = c("unique_identifier", "episode_id")) |>
+      # if any episodes still have exact timestamp duplicates, keep one
+      filter(
+        row_number() == 1,
+        .by = c("unique_identifier", "episode_id", "apprehension_date_time")
+      ) |>
+      select(-new_episode, -episode_id)
+
+```
+
+```{r}
+
+label_months <- function(x) {
+  labs <- format(x, "%B")
+
+  is_jan <- !is.na(x) & month(x) == 1
+  labs[is_jan] <- paste0(labs[is_jan], "\n", format(x[is_jan], "%Y"))
+
+  first_ok <- which(!is.na(x))[1]
+  if (!is.na(first_ok)) {
+    labs[first_ok] <- paste0(
+      format(x[first_ok], "%B"),
+      "\n",
+      format(x[first_ok], "%Y")
+    )
+  }
+
+  labs
+}
+
+if (knitr::is_html_output()) {
+  knitr::opts_chunk$set(
+    dev = "svglite",
+    dev.args = list(
+      bg = "transparent",
+      system_fonts = list(sans = "Arial")
+    )
+  )
+} else if (knitr::is_latex_output()) {
+  knitr::opts_chunk$set(
+    dev.args = list(family = "Arial")
+  )
+}
+
+cb_palette <- c("#0072B2", "#D55E00", "#009E73", "#CC79A7")
+
+theme_minimal_transparent <- function(sz = 13) {
+  theme_minimal(base_size = sz) +
+    theme(
+      plot.background = element_rect(fill = "transparent", color = NA),
+      panel.background = element_rect(fill = "transparent", color = NA),
+      legend.background = element_rect(fill = "transparent", color = NA),
+      legend.box.background = element_rect(fill = "transparent", color = NA),
+      legend.position = "bottom",
+      axis.title.y = element_text(color = "grey30", margin = margin(r = 15)),
+      axis.title.x = element_text(color = "grey30", margin = margin(t = 15))
+    )
+}
+
+#| label: fig-arrests-city
+#| fig-cap: "ICE Arrests Resulting in Detention by Area of Responsibility"
+
+target_aors <- c(
+  "Los Angeles Area of Responsibility",
+  "Chicago Area of Responsibility",
+  "St. Paul Area of Responsibility",
+  "Seattle Area of Responsibility"
 )
+
+plot_df <-
+  detentions_with_arrests |>
+  filter(
+    has_arrest == TRUE,
+    border_arrest == FALSE,
+    apprehension_method %in%
+      c(
+        "Non-Custodial Arrest",
+        "Located",
+        "Worksite Enforcement",
+        "Probation and Parole"
+      )
+  ) |>
+  filter(stay_book_in_date_time >= as.Date("2024-07-01")) |>
+  mutate(
+    aor = case_when(
+      apprehension_aor %in% target_aors ~ apprehension_aor,
+      TRUE ~ "All other AORs"
+    ),
+    aor = factor(
+      aor,
+      levels = c(
+        "Los Angeles Area of Responsibility",
+        "Seattle Area of Responsibility",
+        "Chicago Area of Responsibility",
+        "St. Paul Area of Responsibility",
+        "All other AORs"
+      ),
+      labels = c(
+        "Los Angeles",
+        "Seattle",
+        "Chicago",
+        "Minneapolis-St. Paul",
+        "All other AORs"
+      )
+    ),
+    week = lubridate::round_date(stay_book_in_date_time, "week")
+  ) |>
+  filter(aor != "All other AORs") |>
+  mutate(aor = droplevels(aor))
+
+aor_colors <- cb_palette[1:4]
+names(aor_colors) <- levels(plot_df$aor)
+
+# label data: one row per AOR, positioned at top-left of each panel
+label_df <-
+  tibble(
+    aor = factor(levels(plot_df$aor), levels = levels(plot_df$aor)),
+    x = as.Date("2024-07-15"),
+    y = Inf
+  )
+
+# Biden/Trump labels only in the first panel
+admin_label_df <- tibble(
+  aor = factor(levels(plot_df$aor)[1], levels = levels(plot_df$aor)),
+  x = as.Date(c("2025-01-10", "2025-01-30")),
+  label = c("Biden", "Trump II"),
+  hjust = c(1, 0)
+)
+
+plot_df |>
+  count(week, aor) |>
+  filter(week < as.Date("2026-03-08")) |>
+  ggplot(aes(week, n)) +
+  geom_vline(
+    color = "grey30",
+    xintercept = as.Date("2025-01-20"),
+    lty = "dashed"
+  ) +
+  geom_vline(
+    color = "#CC9999",
+    xintercept = as.Date("2026-01-07"),
+    lty = "dotted"
+  ) +
+  geom_vline(
+    color = "#CC9999",
+    xintercept = as.Date("2026-01-24"),
+    lty = "dotted"
+  ) +
+  geom_line(aes(color = aor), size = 0.8) +
+  geom_text(
+    data = label_df,
+    aes(x = x, y = y, label = aor, color = aor),
+    hjust = 0,
+    vjust = 2.2,
+    size = 4,
+    fontface = "bold"
+  ) +
+  geom_text(
+    data = admin_label_df,
+    aes(x = x, y = Inf, label = label, hjust = hjust),
+    vjust = 1.5,
+    color = "grey30",
+    size = 4
+  ) +
+  facet_wrap(~aor, ncol = 1) +
+  scale_color_manual(values = cb_palette, name = NULL, guide = "none") +
+  scale_y_continuous(labels = scales::label_comma(), limits = c(0, NA)) +
+  scale_x_date(
+    breaks = function(x) {
+      seq(
+        floor_date(min(x, na.rm = TRUE), "quarter"),
+        ceiling_date(max(x, na.rm = TRUE), "quarter"),
+        by = "quarter"
+      )
+    },
+    labels = label_months
+  ) +
+  labs(x = "Date of book-in to detention", y = "Weekly street arrests") +
+  theme_minimal_transparent() +
+  theme(
+    strip.text = element_blank()
+  )
+rm(plot_df)
 ```

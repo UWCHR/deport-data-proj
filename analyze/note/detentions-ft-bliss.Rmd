@@ -24,6 +24,73 @@ file <- "ice_detentions_nov23-oct25.csv.gz"
 
 df <- arrow::read_parquet("https://github.com/deportationdata/ice/raw/refs/heads/main/data/detention-stints-latest.parquet")
 
+pnw_facil <- c("FDLHOLD",
+"HAVMCWA",
+"RICHOLD",
+"SPOHOLD",
+"STJMCWA",
+"TACGHWA",
+"WNTHOLD",
+"ABRDNWA",
+"ADAMSWA",
+"BLHHOLD",
+"BENTOWA",
+"CHELAWA",
+"CLJUVWA",
+"CLARKWA",
+"COWLIWA",
+"COWJVWA",
+"ECOLOWA",
+"FERRYWA",
+"FORKSWA",
+"FRANKWA",
+"GRANTWA",
+"KINCOWA",
+"KITTIWA",
+"MARTIWA",
+"MASONWA",
+"WAMCNEI",
+"CSCNWWA",
+"OKANOWA",
+"PENDOWA",
+"RRFINWA",
+"REGJCWA",
+"BOPSET",
+"SEAICDF",
+"SEAHOLD",
+"SPOKAWA",
+"STEVEWA",
+"SUNNYWA",
+"THURSWA",
+"WHICOWA",
+"YIKIMWA",
+"YAKHOLD",
+"MEDHOLD",
+"POOHOLD",
+"EUGHOLD")
+
+big_new <-
+      c(
+        "EROFCB", # Camp East Montana
+        "EPSSFTX", # El Paso soft-sided
+        "FLDSSFS", # Florida soft-sided / alligator alcatraz
+        "GTMOBCU", # Guantanamo
+        "GTMODCU", # Guantanamo
+        "GTMOACU", # Guantanamo
+        "INMIAMI", # Speedway slammer
+        "NEMCCOI", # Cornhusker clink
+        "LICEPLA", # Angola / camp 57
+        "DHDFNJ", # Delaney Hall
+        "CACTYCA", # California City Corrections  - reopened by CoreCivic in 2025
+        "IRWINGA", # Irwin County - reopened by LaSalle Corrections in 2025
+        "NRLKCMI", # North Lake Processing Faciliy - reopened by Geo in 2025
+        "FIPCAGA", # Folkston annex - opened by Geo in 2025
+        "OKCIMMC", # Cimarron - CoreCivic 2025
+        "OKDBACK", # Diamondback - CoreCivic 2026
+        "STFRCTX", # Dilley
+        "FLBAKCI" # Baker Correctional Institution - reopened in 2025
+      )
+
 ```
 
 ```{r detain_setup}
@@ -189,5 +256,29 @@ df <- df %>%
 cscnwwa_and_erofcb <- df %>% 
   filter(cscnwwa_detention == TRUE & erofcb_detention == TRUE,
          book_in_date_time >= "2025-01-01")
+
+```
+
+```{r}
+
+pnw_detentions <- df %>% 
+  filter(first_facil %in% pnw_facil)
+
+dat <- pnw_detentions %>% 
+  filter(detention_facility_code %in% big_new)
+
+length(unique(dat$unique_identifier))
+
+poo_detentions <- df %>% 
+  filter(first_facil == "POOHOLD")
+
+dat <- poo_detentions %>% 
+  filter(detention_facility_code %in% big_new)
+
+length(unique(dat$unique_identifier))
+
+poo_detentions_distinct <- df %>% 
+  filter(first_facil == "POOHOLD") %>% 
+  distinct(unique_identifier, .keep_all = TRUE)
 
 ```

@@ -12,7 +12,7 @@ output:
 ---
 
 
-```{r setup, message=FALSE, warning=FALSE, include=TRUE}
+```{r setup, message=FALSE, warning=FALSE, include=FALSE}
 
 options(scipen = 1000000)
 
@@ -20,135 +20,138 @@ library(pacman)
 
 p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, digest, ggsankeyfier)
 
-arrests <- arrow::read_parquet("https://github.com/deportationdata/ice/raw/refs/heads/main/data/arrests-latest.parquet")
-
-detentions <- arrow::read_parquet("https://github.com/deportationdata/ice/raw/refs/heads/main/data/detention-stints-latest.parquet")
-
-headcount <- arrow::read_parquet("https://github.com/deportationdata/ice/raw/refs/heads/main/data/facilities-daily-population-latest.parquet")
-
-pnw_facil <- c("FDLHOLD",
-"HAVMCWA",
-"RICHOLD",
-"SPOHOLD",
-"STJMCWA",
-"TACGHWA",
-"WNTHOLD",
-"ABRDNWA",
-"ADAMSWA",
-"BLHHOLD",
-"BENTOWA",
-"CHELAWA",
-"CLJUVWA",
-"CLARKWA",
-"COWLIWA",
-"COWJVWA",
-"ECOLOWA",
-"FERRYWA",
-"FORKSWA",
-"FRANKWA",
-"GRANTWA",
-"KINCOWA",
-"KITTIWA",
-"MARTIWA",
-"MASONWA",
-"WAMCNEI",
-"CSCNWWA",
-"OKANOWA",
-"PENDOWA",
-"RRFINWA",
-"REGJCWA",
-"BOPSET",
-"SEAICDF",
-"SEAHOLD",
-"SPOKAWA",
-"STEVEWA",
-"SUNNYWA",
-"THURSWA",
-"WHICOWA",
-"YIKIMWA",
-"YAKHOLD",
-"MEDHOLD",
-"POOHOLD",
-"EUGHOLD")
-
-```
-
-```{r detain_setup, message=FALSE, warning=FALSE, include=TRUE}
-
-max_date <- max(detentions$book_in_date_time, na.rm=TRUE)
-
-detentions <- detentions %>% 
-  filter(!is.na(stay_book_in_date_time),
-         !is.na(book_in_date_time)) %>% 
-  mutate(stay_length = difftime(stay_book_out_date_time,
-            stay_book_in_date_time, unit='days'),
-         placement_length = difftime(book_out_date_time,
-            book_in_date_time, unit='days'),
-         stay_length_elapsed = difftime(replace_na(stay_book_out_date_time, max_date),
-            stay_book_in_date_time, unit='days'),
-         placement_length_elapsed = difftime(replace_na(book_out_date_time, max_date),
-            book_in_date_time, unit='days'),
-         initial_placement_exact = stay_book_in_date_time == book_in_date_time,
-         initial_placement_approx = date(stay_book_in_date_time) == date(book_in_date_time)
-         )
-
-detentions <- detentions %>% 
-  filter(!is.na(unique_identifier)) %>% 
-  group_by(unique_identifier) %>% 
-  arrange(stay_book_in_date_time, book_in_date_time) %>%
-  mutate(total_stays = n_distinct(stay_book_in_date_time),
-         total_placements = n(),
-         current_stay = is.na(stay_book_out_date_time),
-         current_placement = is.na(book_out_date_time),
-         stay_count = data.table::rleid(stay_book_in_date_time)) %>% 
-  ungroup()
-
-detentions <- detentions %>% 
-  group_by(stay_ID) %>% 
-  arrange(stay_book_in_date_time, book_in_date_time) %>%
-  mutate(placement_count = data.table::rleid(stint_ID),
-         stay_placements = n(),
-         first_facil = detention_facility_code[[1]], 
-         last_facil = detention_facility_code[[length(detention_facility_code)]],
-         prev_facil = lag(detention_facility_code, n=1),
-         next_facil = lead(detention_facility_code, n=1),
-         longest_placement_facil = detention_facility_code[which.max(placement_length_elapsed)],
-         last_placement = placement_count == stay_placements,
-         longest_placement = placement_length_elapsed == max(placement_length_elapsed)
-         ) %>% 
-  ungroup()
+# arrests <- arrow::read_parquet("https://github.com/deportationdata/ice/raw/refs/heads/main/data/arrests-latest.parquet")
+# 
+# detentions <- arrow::read_parquet("https://github.com/deportationdata/ice/raw/refs/heads/main/data/detention-stints-latest.parquet")
+# 
+# headcount <- arrow::read_parquet("https://github.com/deportationdata/ice/raw/refs/heads/main/data/facilities-daily-population-latest.parquet")
+# 
+# pnw_facil <- c("FDLHOLD",
+# "HAVMCWA",
+# "RICHOLD",
+# "SPOHOLD",
+# "STJMCWA",
+# "TACGHWA",
+# "WNTHOLD",
+# "ABRDNWA",
+# "ADAMSWA",
+# "BLHHOLD",
+# "BENTOWA",
+# "CHELAWA",
+# "CLJUVWA",
+# "CLARKWA",
+# "COWLIWA",
+# "COWJVWA",
+# "ECOLOWA",
+# "FERRYWA",
+# "FORKSWA",
+# "FRANKWA",
+# "GRANTWA",
+# "KINCOWA",
+# "KITTIWA",
+# "MARTIWA",
+# "MASONWA",
+# "WAMCNEI",
+# "CSCNWWA",
+# "OKANOWA",
+# "PENDOWA",
+# "RRFINWA",
+# "REGJCWA",
+# "BOPSET",
+# "SEAICDF",
+# "SEAHOLD",
+# "SPOKAWA",
+# "STEVEWA",
+# "SUNNYWA",
+# "THURSWA",
+# "WHICOWA",
+# "YIKIMWA",
+# "YAKHOLD",
+# "MEDHOLD",
+# "POOHOLD",
+# "EUGHOLD")
 
 ```
 
-```{r, message=FALSE, warning=FALSE, include=TRUE}
+```{r detain_setup, message=FALSE, warning=FALSE, include=FALSE}
 
-url <- "https://drive.usercontent.google.com/download?id=1XAOS7t3ijImVXQ9G7l6xdCr_rBh8i4cz&export=download&authuser=0&confirm=t&uuid=0c4a4b74-5e5f-4f00-8c8a-eb00a56708f9&at=APcXIO3JvUiU3ilszJZ3EAuIE01Y:1772065031530"
-f <- tempfile(fileext = ".csv.gz")
-download.file(url, f, mode = "wb")
+# max_date <- max(detentions$book_in_date_time, na.rm=TRUE)
+# 
+# detentions <- detentions %>% 
+#   filter(!is.na(stay_book_in_date_time),
+#          !is.na(book_in_date_time)) %>% 
+#   mutate(stay_length = difftime(stay_book_out_date_time,
+#             stay_book_in_date_time, unit='days'),
+#          placement_length = difftime(book_out_date_time,
+#             book_in_date_time, unit='days'),
+#          stay_length_elapsed = difftime(replace_na(stay_book_out_date_time, max_date),
+#             stay_book_in_date_time, unit='days'),
+#          placement_length_elapsed = difftime(replace_na(book_out_date_time, max_date),
+#             book_in_date_time, unit='days'),
+#          initial_placement_exact = stay_book_in_date_time == book_in_date_time,
+#          initial_placement_approx = date(stay_book_in_date_time) == date(book_in_date_time)
+#          )
+# 
+# detentions <- detentions %>% 
+#   filter(!is.na(unique_identifier)) %>% 
+#   group_by(unique_identifier) %>% 
+#   arrange(stay_book_in_date_time, book_in_date_time) %>%
+#   mutate(total_stays = n_distinct(stay_book_in_date_time),
+#          total_placements = n(),
+#          current_stay = is.na(stay_book_out_date_time),
+#          current_placement = is.na(book_out_date_time),
+#          stay_count = data.table::rleid(stay_book_in_date_time)) %>% 
+#   ungroup()
+# 
+# detentions <- detentions %>% 
+#   group_by(stay_ID) %>% 
+#   arrange(stay_book_in_date_time, book_in_date_time) %>%
+#   mutate(placement_count = data.table::rleid(stint_ID),
+#          stay_placements = n(),
+#          first_facil = detention_facility_code[[1]], 
+#          last_facil = detention_facility_code[[length(detention_facility_code)]],
+#          prev_facil = lag(detention_facility_code, n=1),
+#          next_facil = lead(detention_facility_code, n=1),
+#          longest_placement_facil = detention_facility_code[which.max(placement_length_elapsed)],
+#          last_placement = placement_count == stay_placements,
+#          longest_placement = placement_length_elapsed == max(placement_length_elapsed)
+#          ) %>% 
+#   ungroup()
 
-uwchr <- read.delim(f, sep='|')
+```
 
-uwchr <- uwchr %>% 
-  rename(apprehension_date = arrest_date) %>% 
-  mutate(apprehension_date = mdy(apprehension_date),
-    fy = as.numeric(substr(quarter(apprehension_date, fiscal_start = 10, with_year = TRUE), 0, 4)),
-    fy_quarter = quarter(apprehension_date, fiscal_start = 10, with_year = TRUE),
-    cy_quarter_zoo = as.yearqtr(apprehension_date, format = "%Y-%M-%D"))
+```{r, message=FALSE, warning=FALSE, include=FALSE}
 
-arrests <- arrests %>% 
-  mutate(fy = as.numeric(substr(quarter(apprehension_date, fiscal_start = 10, with_year = TRUE), 0, 4)),
-         fy_quarter = quarter(apprehension_date, fiscal_start = 10, with_year = TRUE),
-         cy_quarter_zoo = as.yearqtr(apprehension_date, format = "%Y-%M-%D"))
+# url <- "https://drive.usercontent.google.com/download?id=1XAOS7t3ijImVXQ9G7l6xdCr_rBh8i4cz&export=download&authuser=0&confirm=t&uuid=0c4a4b74-5e5f-4f00-8c8a-eb00a56708f9&at=APcXIO3JvUiU3ilszJZ3EAuIE01Y:1772065031530"
+# f <- tempfile(fileext = ".csv.gz")
+# download.file(url, f, mode = "wb")
+# 
+# uwchr <- read.delim(f, sep='|')
+# 
+# uwchr <- uwchr %>% 
+#   rename(apprehension_date = arrest_date) %>% 
+#   mutate(apprehension_date = mdy(apprehension_date),
+#     fy = as.numeric(substr(quarter(apprehension_date, fiscal_start = 10, with_year = TRUE), 0, 4)),
+#     fy_quarter = quarter(apprehension_date, fiscal_start = 10, with_year = TRUE),
+#     cy_quarter_zoo = as.yearqtr(apprehension_date, format = "%Y-%M-%D"))
+# 
+# arrests <- arrests %>% 
+#   mutate(fy = as.numeric(substr(quarter(apprehension_date, fiscal_start = 10, with_year = TRUE), 0, 4)),
+#          fy_quarter = quarter(apprehension_date, fiscal_start = 10, with_year = TRUE),
+#          cy_quarter_zoo = as.yearqtr(apprehension_date, format = "%Y-%M-%D"))
 
+# save.image("~/git/deport-data-proj/analyze/input/ddp-uwchr-mar-2026.RData")
+load("~/git/deport-data-proj/analyze/input/ddp-uwchr-mar-2026.RData")
 ```
 
 # Analysis
 
 Average daily ICE arrests hit an all-time high during late 2025.
 
-```{r}
+```{r echo=FALSE, message=FALSE, warning=FALSE}
 
 dat1 <- arrests %>% 
+  filter(apprehension_date <= "2026-03-15") %>% 
   count(apprehension_date) %>% 
   mutate(moving_avg = rollmean(n, k = 90, fill = NA, align = "right"),
          source = "ddp")
@@ -172,7 +175,7 @@ p1
 
 During the same time period, the nationwide detained population peaked at over 70,000; it declined slightly in early 2026.
 
-```{r national_headcount}
+```{r national_headcount, echo=FALSE, message=FALSE, warning=FALSE}
 
 uwchr_headcount_detloc <- read_delim(here::here('analyze', 'input', 'headcount_fy12-24ytd.csv.gz'), delim="|")
 
@@ -191,20 +194,20 @@ ddp_headcount <- headcount %>%
 
 dat <- rbind(uwchr_headcount, ddp_headcount)
 
-p1 <- dat %>% 
+p2 <- dat %>% 
   filter(date >= "2011-10-01") %>% 
   ggplot(aes(x = date, y = moving_avg, color = source)) +
   geom_line() +
   ylim(0, NA) +
   labs(title= "National detained population, 7 day moving avg.")
 
-p1
+p2
 
 ```
 
 Seattle AOR arrests also hit an historic high point in late 2025.
 
-```{r}
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
 
 dat1 <- arrests %>% 
   filter(apprehension_aor == "Seattle Area of Responsibility") %>% 
@@ -218,9 +221,10 @@ dat2 <- uwchr %>%
   mutate(moving_avg = rollmean(n, k = 90, fill = NA, align = "right"), 
          source = "uwchr")
 
-dat <- rbind(dat1, dat2)
+dat_arrests_90_day_avg <- rbind(dat1, dat2) %>% 
+  mutate(type = "Arrests (90 day moving avg.)")
 
-p1 <- dat %>% 
+p1 <- dat_arrests_90_day_avg %>% 
   ggplot(aes(x = apprehension_date, y = moving_avg, color = source)) +
   geom_line() +
   ylim(0, NA) +
@@ -232,9 +236,9 @@ p1
 
 Detained population at NWIPC dropped despite high rate of arrests. Why?
 
-```{r cscnwwa_headcount}
+```{r cscnwwa_headcount, message=FALSE, warning=FALSE, echo=FALSE}
 
-cacnwwa_headcount_uwchr <- uwchr_headcount_detloc %>% 
+cscnwwa_headcount_uwchr <- uwchr_headcount_detloc %>% 
   filter(detention_facility_code == "CSCNWWA") %>% 
   rename(n_detained_at_midnight = n) %>%
   mutate(moving_avg = rollmean(n_detained_at_midnight, k = 7, fill = NA, align = "right"),
@@ -247,9 +251,10 @@ cscnwwa_headcount_ddp <- headcount %>%
          source = "ddp") %>% 
   dplyr::select(date, n_detained_at_midnight, moving_avg, source)
 
-dat <- rbind(cacnwwa_headcount_uwchr, cscnwwa_headcount_ddp)
+dat_detention_pop_7_day_avg <- rbind(cscnwwa_headcount_uwchr, cscnwwa_headcount_ddp) %>% 
+  mutate(type = "NWIPC pop. (7 day moving avg.)")
 
-p1 <- dat %>% 
+p1 <- dat_detention_pop_7_day_avg %>% 
   filter(date >= "2011-10-01") %>% 
   ggplot(aes(x = date, y = moving_avg, color = source)) +
   geom_line() +
@@ -260,9 +265,25 @@ p1
 
 ```
 
+Detention population at NWIPC peaks in June/July 2025; rate of arrests peaks in first weeks of Jan 2026.
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+
+dat <- rbind(dat_arrests_90_day_avg |> rename(date = apprehension_date) |> dplyr::select(-n), dat_detention_pop_7_day_avg |> dplyr::select(-n_detained_at_midnight)) %>% 
+  filter(date >= "2025-01-01")
+
+p1 <- dat %>% 
+  ggplot(aes(x = date, y = moving_avg, color = type)) +
+  geom_line() +
+facet_wrap(~type, ncol = 1, scales = "free_y")
+
+p1
+
+```
+
 Explanation 1: Slightly more people who are arrested by ICE are not detained
 
-```{r}
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
 
 arrests <- arrests %>% 
   filter(apprehension_date <= "2026-03-31") %>% 
@@ -306,9 +327,9 @@ p2 <- dat %>%
 p2
 ```
 
-Explanation 2: Increased detention "throughput"; more people are being booked in, but more also being booked out during same time. (Question: does this signal more "churn" overall or is there a portion of population that cycles thru versus portion of population which is warehoused?)
+Explanation 2: Increased detention "throughput"; more people are being booked in, but more also being booked out during same time. (Question: does this signal more "churn" overall or is there a portion of population that cycles thru versus portion of population which is warehoused? How to differentiate?)
 
-```{r}
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
 
 cscnwwa_detentions <- detentions %>% 
   filter(detention_facility_code == "CSCNWWA")
@@ -351,7 +372,7 @@ p2
 
 Most people booked out of NWIPC are transferred to other facilities; small but increasing proportion bonded out or released in various categories.
 
-```{r}
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
 
 cscnwwa_detentions <- cscnwwa_detentions %>% 
   mutate(book_in_week = floor_date(book_in_date_time, unit = "week", week_start = "Monday"),
@@ -373,7 +394,7 @@ ggplotly(p1)
 
 Facilities people are transferred to has shifted over the year.
 
-```{r}
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
 
 dat <- cscnwwa_detentions %>% 
   filter(book_out_date_time >= "2024-12-31") %>% 
@@ -390,7 +411,7 @@ ggplotly(p1)
 
 People transferred to NWIPC from other facilities are primarily coming via local hold rooms.
 
-```{r}
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
 
 dat <- cscnwwa_detentions %>% 
   filter(book_in_date_time >= "2024-12-31") %>% 
@@ -404,9 +425,10 @@ p1 <- dat %>%
 p1
 
 ```
+
 This closely tracks initial facility bookins for Seattle AOR.
 
-```{r}
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
 
 sea_bookins <- detentions %>% 
   filter(book_in_aor == "Seattle Area of Responsibility",
@@ -427,7 +449,7 @@ ggplotly(p1)
 
 Transfers to Ft. Bliss/Camp East Montana make up a significant proportion of increased throughput during late 2025
 
-```{r transfers_from_cscnwwa}
+```{r transfers_from_cscnwwa, message=FALSE, warning=FALSE, echo=FALSE}
 
 cscnwwa_transfers <- detentions %>% 
   filter(detention_facility_code == "CSCNWWA",
@@ -453,7 +475,7 @@ p1
 
 Majority transferred to EROFCB removed; 73 remained in detention at time of release of dataset.
 
-```{r}
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
 
 cscnwwa_to_erofcb <- detentions %>% 
   filter(detention_facility_code == "CSCNWWA",
@@ -470,7 +492,7 @@ p1
 
 ```
 
-```{r}
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
 
 cscnwwa_transfers_2025 <- detentions %>% 
   distinct(stay_ID, .keep_all = TRUE) %>% 
@@ -491,27 +513,56 @@ dat <- cscnwwa_transfers_2025 %>%
 
 ```{r}
 
-cscnwwa_annual_book_ins <- detentions %>% 
-  filter(book_in_date_time >= "2022-01-01", 
-    detention_facility_code == "CSCNWWA") %>% 
-  mutate(cy = year(book_in_date_time)) %>% 
-  count(cy) %>% 
-  mutate(type = "bookouts")
+# cscnwwa_transfers_by_gender <- cscnwwa_transfers %>% 
+#   count(next_facil, gender)
+# 
+# p1 <- cscnwwa_transfers_by_gender %>% 
+#   filter(gender != "Unknown") %>% 
+#   ggplot(aes(x = gender, y = n, fill = next_facil)) +
+#   geom_col(position="fill")
+# 
+# ggplotly(p1)
 
-cscnwwa_annual_book_outs <- detentions %>% 
-  filter(book_out_date_time >= "2022-01-01", 
-    detention_facility_code == "CSCNWWA") %>% 
-  mutate(cy = year(book_out_date_time)) %>% 
-  count(cy) %>% 
-  mutate(type = "bookins")
+cscnwwa_transfers_by_gender_age <- cscnwwa_transfers %>% 
+  mutate(age = year(book_in_date_time) - birth_year,
+         age_group = cut(age,
+                           breaks = c(0, 18, 25, 40, 60, Inf),
+                           right = FALSE)) %>% 
+  count(next_facil, gender, age_group)
 
-dat <- rbind(cscnwwa_annual_book_ins, cscnwwa_annual_book_outs)
+p1 <- cscnwwa_transfers_by_gender_age %>% 
+    filter(gender != "Unknown",
+         age_group != "[0,18)") %>% 
+  ggplot(aes(x = gender, y = n, fill = next_facil)) +
+  geom_col(position="fill") +
+  facet_wrap(~age_group) +
+  labs(title ="NWIPC transfer facility by age, gender")
 
-p1 <- dat %>% 
-  ggplot(aes(x = cy, y = n, fill = type)) +
-  geom_col(position="dodge")
+ggplotly(p1)
 
-p1
+
+cscnwwa_bookouts_by_gender_age <- cscnwwa_detentions %>% 
+  mutate(age = year(book_in_date_time) - birth_year,
+         age_group = cut(age,
+                           breaks = c(0, 18, 25, 40, 60, Inf),
+                           right = FALSE),
+         detention_release_reason = case_when(str_detect(detention_release_reason, "Paroled") ~ "Paroled",
+                                              str_detect(detention_release_reason, "Order of Supervision") ~ "Order of supervision",
+                                              str_detect(detention_release_reason, "Order of Recognizance") ~ "Order of recognizance",
+                                              str_detect(detention_release_reason, "ORR") ~ "ORR",
+                                              str_detect(detention_release_reason, "Bonded Out") ~ "Bonded out",
+                                              TRUE ~ detention_release_reason)) %>% 
+  count(detention_release_reason, gender, age_group)
+
+p1 <- cscnwwa_bookouts_by_gender_age %>% 
+  filter(gender != "Unknown",
+         age_group != "[0,18)") %>% 
+  ggplot(aes(x = gender, y = n, fill = detention_release_reason)) +
+  geom_col(position="fill") +
+  facet_wrap(~age_group) +
+  labs(title ="NWIPC detention stint release reason by age, gender")
+
+ggplotly(p1)
 
 ```
 

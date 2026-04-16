@@ -73,6 +73,32 @@ pnw_facil <- c("FDLHOLD",
 "POOHOLD",
 "EUGHOLD")
 
+gtmo <- c("GTMOBCU",
+"GTMODCU",
+"GTMOACU")
+
+big_new <-
+      c(
+        "EROFCB", # Camp East Montana
+        "EPSSFTX", # El Paso soft-sided
+        "FLDSSFS", # Florida soft-sided / alligator alcatraz
+        "GTMOBCU", # Guantanamo
+        "GTMODCU", # Guantanamo
+        "GTMOACU", # Guantanamo
+        "INMIAMI", # Speedway slammer
+        "NEMCCOI", # Cornhusker clink
+        "LICEPLA", # Angola / camp 57
+        "DHDFNJ", # Delaney Hall
+        "CACTYCA", # California City Corrections  - reopened by CoreCivic in 2025
+        "IRWINGA", # Irwin County - reopened by LaSalle Corrections in 2025
+        "NRLKCMI", # North Lake Processing Faciliy - reopened by Geo in 2025
+        "FIPCAGA", # Folkston annex - opened by Geo in 2025
+        "OKCIMMC", # Cimarron - CoreCivic 2025
+        "OKDBACK", # Diamondback - CoreCivic 2026
+        "STFRCTX", # Dilley
+        "FLBAKCI" # Baker Correctional Institution - reopened in 2025
+      )
+
 ```
 
 ```{r}
@@ -81,7 +107,11 @@ stays <- stays %>%
   mutate(stays_inc_cscnwwa = str_detect(detention_facility_codes_all, "CSCNWWA"),
          stays_inc_erofcb = str_detect(detention_facility_codes_all, "EROFCB"),
          stays_inc_pnw_facil = str_detect(detention_facility_codes_all, paste(pnw_facil, collapse="|")),
-         ice_arrest = unique_identifier %in% arrests$unique_identifier)
+         stays_inc_gtmo = str_detect(detention_facility_codes_all, paste(gtmo, collapse="|")),
+         stays_inc_fldssfs = str_detect(detention_facility_codes_all, "FLDSSFS"),
+         stays_inc_big_new = str_detect(detention_facility_codes_all, paste(big_new, collapse="|")),
+         ice_arrest = unique_identifier %in% arrests$unique_identifier,
+         sea_bookin = detention_facility_code_first %in% pnw_facil)
 
 ```
 
@@ -89,7 +119,7 @@ stays <- stays %>%
 
 ```{r}
 
-cscnwwa_stays <- stays %>% 
+cscnwwa_stays <- stays %>% d
   filter(stays_inc_cscnwwa == TRUE)
 
 dat <- cscnwwa_stays %>% 
@@ -150,6 +180,33 @@ ggplotly(p1)
 cscnwwa_stays <- stays %>% 
   filter(stays_inc_cscnwwa == TRUE)
 
+sea_bookins <- stays %>% 
+  filter(sea_bookin == TRUE)
 
+sea_big_new <- sea_bookins[sea_bookins$stays_inc_big_new == TRUE,]
+
+
+
+```
+
+```{r}
+
+sea_arrests_by_crim <- arrests %>% 
+  filter(!duplicate_likely,
+         !is.na(unique_identifier),
+         !is.na(case_criminality),
+         apprehension_date >= "2024-07-01",
+         apprehension_aor == "Seattle Area of Responsibility") %>% 
+  mutate(month = floor_date(apprehension_date, unit = "months")) %>% 
+  count(month, case_criminality)
+
+write_delim(sea_arrests_by_crim, "sea_arrests_by_case_criminality.csv", delim=",")
+
+sea_bookins_by_msc_charge <- stays %>% 
+  filter(detention_facility_code_first %in% pnw_facil,
+         book_in_date_time_first >= "2025-10-01") %>% 
+  count(msc_charge)
+
+write_delim(sea_bookins_by_msc_charge, "sea_bookins_by_msc_charge.csv", delim=",")
 
 ```
