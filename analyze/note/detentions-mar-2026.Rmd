@@ -15,10 +15,22 @@ output:
 ```{r setup, message=FALSE, warning=FALSE, include=FALSE}
 
 options(scipen = 1000000)
+options(ggplot2.continuous.colour = "viridis")
+options(ggplot2.continuous.fill = "viridis")
+options(ggplot2.discrete.colour = "viridis")
+options(ggplot2.discrete.fill = "viridis")
 
 library(pacman)
 
 p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, digest, ggsankeyfier)
+
+every_nth = function(n) {
+  return(function(x) {x[c(TRUE, rep(FALSE, n - 1))]})
+}
+
+every_2nd_nth = function(n) {
+  return(function(x) {x[c(FALSE, rep(TRUE, n - 1))]})
+}
 
 # arrests <- arrow::read_parquet("https://github.com/deportationdata/ice/raw/refs/heads/main/data/arrests-latest.parquet")
 # 
@@ -229,6 +241,38 @@ p1 <- dat_arrests_90_day_avg %>%
   geom_line() +
   ylim(0, NA) +
   labs(title = "Seattle AOR daily ICE arrests, 90 day moving avg.")
+
+p1
+
+```
+
+```{r}
+
+dat1 <- arrests %>% 
+  filter(apprehension_aor == "Seattle Area of Responsibility") %>% 
+  mutate(cy_quarter_zoo = as.yearqtr(apprehension_date, format = "%Y-%M-%D")) %>% 
+  count(cy_quarter_zoo) %>% 
+  filter(cy_quarter_zoo != "2022 Q4")
+
+dat2 <- uwchr %>% 
+  filter(aor == "SEA") %>% 
+  mutate(cy_quarter_zoo = as.yearqtr(apprehension_date, format = "%Y-%M-%D")) %>% 
+  count(cy_quarter_zoo) %>% 
+  filter(cy_quarter_zoo != "2023 Q1")
+
+dat <- rbind(dat1, dat2)
+
+p1 <- dat %>% 
+  ggplot(aes(x = cy_quarter_zoo, y = n)) +
+  geom_line(color = viridis(1), linewidth = 1.5) +
+  ylab("Quarterly Total Arrests") +
+  ylim(0, 3000) +
+  xlab("") +
+  scale_x_yearqtr(format = "%Y", n = 10) +
+  labs(title = "ICE apprehensions in late 2025 surpass historical high point",
+       subtitle = "Seattle Area of Responsibility, Oct. 2011 - March 10, 2026",
+       caption = "Sources: ICE arrests datasets obtained via FOIA by UWCHR, Deportation Data Project.") +
+  theme_minimal()
 
 p1
 

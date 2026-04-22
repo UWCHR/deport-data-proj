@@ -1,0 +1,106 @@
+---
+title: "ICE ERO-LESA encounters data Oct. 2022 - Mar. 2026"
+author: "UWCHR"
+date: "2026-04-17"
+output:
+    html_document:
+        html_preview: true
+        toc: true
+        toc_depth: 3
+        toc_float: true
+        code_folding: hide
+---
+
+
+```{r setup, message=FALSE, warning=FALSE, include=FALSE}
+
+options(scipen = 1000000)
+
+library(pacman)
+
+p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, digest, ggsankeyfier)
+
+encounters_fy_25 <- readxl::read_excel(here::here("import", "input", "2026-03", "2026-ICLI-00005_Encounters_FY25_20260311_Redacted.xlsx"), skip = 6) %>% 
+  janitor::clean_names() %>% 
+  mutate(event_date = ymd_hms(event_date))
+
+encounters_fy_26 <- readxl::read_excel(here::here("import", "input", "2026-03", "2026-ICLI-00005_Encounters_FY26_20260311_Redacted.xlsx"), skip = 6) %>% 
+  janitor::clean_names() %>% 
+  mutate(event_date = ymd_hms(event_date))
+
+encounters <- rbind(encounters_fy_25, encounters_fy_26)
+
+detainers_fy_25 <- readxl::read_excel(here::here("import", "input", "2026-03", "2026-ICLI-00005_Detainers_FY25_20260311_Redacted.xlsx"), skip = 6) %>% 
+  janitor::clean_names() %>% 
+  mutate(detainer_prepare_date = ymd(detainer_prepare_date))
+
+detainers_fy_26 <- readxl::read_excel(here::here("import", "input", "2026-03", "2026-ICLI-00005_Detainers_FY26_20260311_Redacted.xlsx"), skip = 6) %>% 
+  janitor::clean_names() %>% 
+  mutate(detainer_prepare_date = ymd(detainer_prepare_date))
+
+detainers <- rbind(detainers_fy_25, detainers_fy_26)
+
+arrests <- arrow::read_parquet("https://github.com/deportationdata/ice/raw/refs/heads/main/data/arrests-latest.parquet")
+
+arrests <- arrests %>% 
+  filter(apprehension_date >= "2024-10-01")
+
+```
+
+```{r}
+
+encounters <- encounters %>% 
+  mutate(cy_quarter = as.yearqtr(event_date),
+         enc_in_det = anonymized_identifier %in% unique(detainers$anonymized_identifier),
+         enc_in_arr = anonymized_identifier %in% unique(arrests$unique_identifier))
+
+detainers <- detainers %>% 
+  mutate(cy_quarter = as.yearqtr(detainer_prepare_date),
+         det_in_enc = anonymized_identifier %in% unique(encounters$anonymized_identifier),
+         det_in_arr = anonymized_identifier %in% unique(arrests$unique_identifier))
+
+arrests <- arrests %>% 
+  mutate(cy_quarter = as.yearqtr(apprehension_date),
+         arr_in_enc = unique_identifier %in% unique(encounters$anonymized_identifier),
+         arr_in_det = unique_identifier %in% unique(detainers$anonymized_identifier))
+
+```
+
+```{r}
+
+detainers_sea_tab <- detainers %>% 
+  filter(facility_aor == "Seattle Area of Responsibility") %>% 
+  count(det_in_arr, detainer_facility)
+
+detainers_wa_tab <- detainers %>% 
+  filter(facility_state == "WASHINGTON") %>% 
+  count(det_in_arr, detainer_facility)
+
+```
+
+
+```{r}
+
+sea_enc_landmarks <- encounters_fy_26 %>%
+  filter(responsible_aor == "Seattle Area of Responsibility") %>% 
+  count(event_landmark) %>%
+  arrange(desc(n))
+
+dec1_5 <- encounters_fy_26 %>%
+  filter(responsible_aor == "Seattle Area of Responsibility",
+         event_date >= "2025-12-01" & event_date <= "2025-12-05")
+
+```
+
+```{r}
+
+sea_detainers <- detainers_fy_26 %>%
+  filter(facility_aor == "Seattle Area of Responsibility") %>% 
+  count(detainer_facility) %>%
+  arrange(desc(n))
+
+dec1_5 <- detainers_fy_26 %>%
+  filter(facility_aor == "Seattle Area of Responsibility",
+         detainer_prepare_date >= "2025-12-01" & detainer_prepare_date <= "2025-12-05")
+
+```
