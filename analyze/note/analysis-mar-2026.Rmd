@@ -498,43 +498,47 @@ p1
 
 ```{r}
 
-dat1 <- uwchr %>% 
+uwchr <- uwchr %>% 
   rename(apprehension_method = arrest_method) %>% 
-  mutate(apprehension_method = case_when(
+  mutate(apprehension_method_simple = case_when(
     str_detect(apprehension_method, "CAP") ~ "Custodial Arrest",
     apprehension_method == "Criminal Alien Program" ~ "Custodial Arrest",
     apprehension_method == "Custodial Arrest" ~ "Custodial Arrest",
-    apprehension_method == "287(g) Program" ~ "287(g) Program",
+    # apprehension_method == "287(g) Program" ~ "287(g) Program",
     apprehension_method == "Non-Custodial Arrest" ~ "Non-Custodial Arrest",
     apprehension_method == "Located" ~ "Non-Custodial Arrest",
     apprehension_method == "Worksite Enforcement" ~ "Non-Custodial Arrest",
-    apprehension_method == "ERO Reprocessed Arrest" ~ "ERO Reprocessed Arrest",
+    # apprehension_method == "ERO Reprocessed Arrest" ~ "ERO Reprocessed Arrest",
     TRUE ~ "All other methods"
-  )) %>% 
-  count(apprehension_method, fy) %>% 
-  mutate(source = "UWCHR")
+  ))
 
-dat2 <- arrests %>% 
-    mutate(apprehension_method = case_when(
+arrests <- arrests %>% 
+  mutate(apprehension_method_simple = case_when(
     str_detect(apprehension_method, "CAP") ~ "Custodial Arrest",
     apprehension_method == "Criminal Alien Program" ~ "Custodial Arrest",
     apprehension_method == "Custodial Arrest" ~ "Custodial Arrest",
-    apprehension_method == "287(g) Program" ~ "287(g) Program",
+    # apprehension_method == "287(g) Program" ~ "287(g) Program",
     apprehension_method == "Non-Custodial Arrest" ~ "Non-Custodial Arrest",
-    apprehension_method == "Located" ~ "Located",
+    apprehension_method == "Located" ~ "Non-Custodial Arrest",
     apprehension_method == "Worksite Enforcement" ~ "Non-Custodial Arrest",
-    apprehension_method == "ERO Reprocessed Arrest" ~ "ERO Reprocessed Arrest",
+    # apprehension_method == "ERO Reprocessed Arrest" ~ "ERO Reprocessed Arrest",
     TRUE ~ "All other methods"
-  )) %>% 
-  count(apprehension_method, fy) %>% 
+  ))
+
+dat1 <- uwchr %>%
+  count(apprehension_method_simple, fy) %>% 
+  mutate(source = "UWCHR")
+
+dat2 <- arrests %>% 
+  count(apprehension_method_simple, fy) %>% 
   mutate(source = "DDP")
 
 dat <- rbind(dat1, dat2)
 
 p1 <- dat %>%
-  ggplot(aes(x = fy, y = n, fill = apprehension_method )) +
+  ggplot(aes(x = fy, y = n, fill = apprehension_method_simple )) +
   geom_col() +
-  labs(title = "National quarterly ICE arrests by method")
+  labs(title = "National annual ICE arrests by method category")
 
 p1
 
@@ -544,43 +548,25 @@ p1
 
 dat1 <- uwchr %>% 
   filter(area_of_responsibility == "Seattle Area of Responsibility") %>% 
-  rename(apprehension_method = arrest_method) %>% 
-  mutate(apprehension_method = case_when(
-    str_detect(apprehension_method, "CAP") ~ "Custodial Arrest",
-    apprehension_method == "Criminal Alien Program" ~ "Custodial Arrest",
-    apprehension_method == "Custodial Arrest" ~ "Custodial Arrest",
-    apprehension_method == "287(g) Program" ~ "287(g) Program",
-    apprehension_method == "Non-Custodial Arrest" ~ "Non-Custodial Arrest",
-    apprehension_method == "Located" ~ "Non-Custodial Arrest",
-    apprehension_method == "Worksite Enforcement" ~ "Non-Custodial Arrest",
-    apprehension_method == "ERO Reprocessed Arrest" ~ "ERO Reprocessed Arrest",
-    TRUE ~ "All other methods"
-  )) %>% 
-  count(apprehension_method, cy_quarter_zoo) %>% 
+  count(apprehension_method_simple, cy_quarter_zoo) %>% 
   mutate(source = "UWCHR")
 
 dat2 <- arrests %>% 
   filter(apprehension_aor == "Seattle Area of Responsibility") %>% 
-    mutate(apprehension_method = case_when(
-    str_detect(apprehension_method, "CAP") ~ "Custodial Arrest",
-    apprehension_method == "Criminal Alien Program" ~ "Custodial Arrest",
-    apprehension_method == "Custodial Arrest" ~ "Custodial Arrest",
-    apprehension_method == "287(g) Program" ~ "287(g) Program",
-    apprehension_method == "Non-Custodial Arrest" ~ "Non-Custodial Arrest",
-    apprehension_method == "Located" ~ "Located",
-    apprehension_method == "Worksite Enforcement" ~ "Non-Custodial Arrest",
-    apprehension_method == "ERO Reprocessed Arrest" ~ "ERO Reprocessed Arrest",
-    TRUE ~ "All other methods"
-  )) %>% 
-  count(apprehension_method, cy_quarter_zoo) %>% 
+  count(apprehension_method_simple, cy_quarter_zoo) %>% 
   mutate(source = "DDP")
 
 dat <- rbind(dat1, dat2)
 
 p1 <- dat %>%
-  ggplot(aes(x = cy_quarter_zoo, y = n, fill = apprehension_method )) +
+  ggplot(aes(x = cy_quarter_zoo, y = n, fill = apprehension_method_simple )) +
   geom_col() +
-  labs(title = "Seattle AOR quarterly ICE arrests by method")
+  ylab("Total arrests") +
+  xlab("") +
+  scale_x_yearqtr(format = "%Y", n = 10) +
+  labs(title = 'Rise in "Non-Custodial" arrests',
+       subtitle = "Seattle Area of Resposibility, Oct. 2011 - Mar. 2026") +
+  theme_minimal()
 
 p1
 
@@ -591,6 +577,66 @@ p1
 # p2
 
 ```
+
+```{r}
+
+dat <- arrests %>% 
+  mutate(apprehension_method_simple = case_when(
+    str_detect(apprehension_method, "CAP") ~ "Custodial Arrest",
+    apprehension_method == "Criminal Alien Program" ~ "Custodial Arrest",
+    apprehension_method == "Custodial Arrest" ~ "Custodial Arrest",
+    # apprehension_method == "287(g) Program" ~ "287(g) Program",
+    apprehension_method == "Non-Custodial Arrest" ~ "Non-Custodial Arrest",
+    apprehension_method == "Located" ~ "Non-Custodial Arrest",
+    apprehension_method == "Worksite Enforcement" ~ "Non-Custodial Arrest",
+    # apprehension_method == "ERO Reprocessed Arrest" ~ "ERO Reprocessed Arrest",
+    TRUE ~ "All other methods"
+  ),
+  cy = year(apprehension_date)) %>% 
+  count(apprehension_state, cy, apprehension_method_simple)
+
+states_subset <- c("ARIZONA",
+                   "CALIFORNIA",
+                   "MINNESOTA",
+                   "MASSACHUSETTS",
+                   "VIRGINIA",
+                   "NEW JERSEY",
+                   "HAWAII",
+                   "MARYLAND",
+                   "ILLINOIS",
+                   "NEW YORK",
+                   "MAINE",
+                   "OREGON",
+                   "PENNSYLVANIA",
+                   "WASHINGTON")
+
+p1 <- dat %>%
+  filter(apprehension_state %in% states_subset) %>% 
+  ggplot(aes(x = cy, y = n, fill = apprehension_method_simple)) +
+  geom_col(position="fill") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0, hjust = 0)) +
+  scale_fill_viridis_d() +
+  facet_wrap(~apprehension_state) +
+  labs(title= "Proportion of arrests by method per year",
+       subtitle = "Selected states")
+  
+p1
+
+p2 <- dat %>%
+  filter(apprehension_state %in% states_subset) %>% 
+  ggplot(aes(x = cy, y = n, fill = apprehension_method_simple)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0, hjust = 0)) +
+  scale_fill_viridis_d() +
+  facet_wrap(~apprehension_state, scales="free_y") +
+  labs(title= "Total arrests by method per year",
+       subtitle = "Selected states")
+  
+p2
+
+
+```
+
 
 ```{r}
 
@@ -795,7 +841,7 @@ arrests_with_det <- arrests %>%
   filter(unique_identifier %in% detentions$unique_identifier)
 
 dat <- arrests_with_det %>% 
-  filter(apprehension_date >= "2024-07-01") %>% 
+  filter(apprehension_date >= "2025-01-01") %>% 
   mutate(week = floor_date(apprehension_date, unit = "week", week_start = "Monday")) %>% 
   count(week, apprehension_aor)
 
@@ -807,7 +853,8 @@ p1 <- dat %>%
                                  "Seattle Area of Responsibility")) %>% 
   ggplot(aes(x = week, y = n, color = apprehension_aor)) +
   geom_line() +
-  facet_wrap(~apprehension_aor, ncol =1)
+  facet_wrap(~apprehension_aor, ncol =1, scales="fixed") +
+  theme_minimal()
 
 p1
 
