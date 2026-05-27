@@ -278,6 +278,29 @@ p1
 
 ```
 
+```{r}
+
+dat <- arrests %>% 
+  filter(apprehension_aor == "Seattle Area of Responsibility") %>% 
+  mutate(cy_quarter_zoo = as.yearqtr(apprehension_date, format = "%Y-%M-%D")) %>% 
+  count(cy_quarter_zoo, apprehension_state)
+
+p1 <- dat %>% 
+  ggplot(aes(x = cy_quarter_zoo, y = n, color = apprehension_state, group=apprehension_state)) +
+  geom_line() +
+  ylab("Quarterly Total Arrests") +
+  ylim(0, 3000) +
+  xlab("") +
+  scale_x_yearqtr(format = "%Y", n = 10) +
+  labs(title = "ICE apprehensions in late 2025 surpass historical high point",
+       subtitle = "Seattle Area of Responsibility, Oct. 2011 - March 10, 2026",
+       caption = "Sources: ICE arrests datasets obtained via FOIA by UWCHR, Deportation Data Project.") +
+  theme_minimal()
+
+p1
+
+```
+
 Detained population at NWIPC dropped despite high rate of arrests. Why?
 
 ```{r cscnwwa_headcount, message=FALSE, warning=FALSE, echo=FALSE}
@@ -476,18 +499,56 @@ This closely tracks initial facility bookins for Seattle AOR.
 
 sea_bookins <- detentions %>% 
   filter(book_in_aor == "Seattle Area of Responsibility",
-         book_in_date_time >= "2025-01-01") %>% 
+         book_in_date_time >= "2025-01-01",
+         placement_count == 1) %>% 
   distinct(stay_ID, .keep_all = TRUE)
 
 dat <- sea_bookins %>% 
   mutate(month = floor_date(book_in_date_time, "month")) %>% 
-  count(month, detention_facility)
+  count(month, detention_facility_code)
 
 p1 <- dat %>% 
-  ggplot(aes(x = month, y = n, fill = detention_facility)) +
+  ggplot(aes(x = month, y = n, fill = detention_facility_code)) +
   geom_col()
 
 ggplotly(p1)
+
+```
+
+```{r}
+
+dat <- sea_bookins %>% 
+  mutate(month = floor_date(book_in_date_time, "month")) %>% 
+  count(month, detention_facility_code)
+
+p1 <- dat %>% 
+  filter(detention_facility_code %in% c("EUGHOLD", "FDLHOLD", "MEDHOLD", "POOHOLD", "RICHOLD", "SEAHOLD", "SPOHOLD", "WNTHOLD", "YAKHOLD", "ANCHOLD")) %>% 
+  ggplot(aes(x = month, y = n, fill = detention_facility_code)) +
+  geom_col()
+
+ggplotly(p1)
+
+p2 <- dat %>% 
+  filter(detention_facility_code %in% c("POOHOLD", "SEAHOLD", "SPOHOLD", "YAKHOLD")) %>% 
+  ggplot(aes(x = month, y = n, color = detention_facility_code)) +
+  geom_line() +
+  facet_wrap(~detention_facility_code, ncol =1) +
+  theme_minimal() +
+  labs(title = "ICE Initial Detention Book-ins",
+       subtitle = "Selected Pacific Northwest Hold Rooms")
+
+p2
+
+p3 <- dat %>% 
+    filter(detention_facility_code %in% c("EUGHOLD", "FDLHOLD", "MEDHOLD", "POOHOLD", "RICHOLD", "SEAHOLD", "SPOHOLD", "WNTHOLD", "YAKHOLD", "ANCHOLD")) %>% 
+  ggplot(aes(x = month, y = n, color = detention_facility_code, group = detention_facility_code)) +
+  geom_line() +
+  facet_wrap(~detention_facility_code, ncol=2) +
+  theme_minimal() +
+  labs(title = "ICE Initial Detention Book-ins",
+       subtitle = "Pacific Northwest Hold Rooms")
+
+p3
 
 ```
 
@@ -557,15 +618,37 @@ dat <- cscnwwa_transfers_2025 %>%
 
 ```{r}
 
-# cscnwwa_transfers_by_gender <- cscnwwa_transfers %>% 
-#   count(next_facil, gender)
-# 
-# p1 <- cscnwwa_transfers_by_gender %>% 
-#   filter(gender != "Unknown") %>% 
-#   ggplot(aes(x = gender, y = n, fill = next_facil)) +
-#   geom_col(position="fill")
-# 
-# ggplotly(p1)
+cscnwwa_transfers_by_gender <- cscnwwa_transfers %>%
+  count(next_facil, gender)
+
+p1 <- cscnwwa_transfers_by_gender %>%
+  filter(gender != "Unknown") %>%
+  ggplot(aes(x = gender, y = n, fill = next_facil)) +
+  geom_col(position="fill")
+
+ggplotly(p1)
+
+cscnwwa_bookouts_by_gender <- cscnwwa_detentions %>% 
+  filter(gender != "Unknown") %>%
+  mutate(detention_release_reason = case_when(str_detect(detention_release_reason, "Paroled") ~ "Paroled",
+                                              str_detect(detention_release_reason, "Order of Supervision") ~ "Order of supervision",
+                                              str_detect(detention_release_reason, "Order of Recognizance") ~ "Order of recognizance",
+                                              str_detect(detention_release_reason, "ORR") ~ "ORR",
+                                              str_detect(detention_release_reason, "Bonded Out") ~ "Bonded out",
+                                              TRUE ~ detention_release_reason)) %>% 
+  count(detention_release_reason, gender)
+
+p1 <- cscnwwa_bookouts_by_gender %>% 
+  filter(gender != "Unknown") %>% 
+  ggplot(aes(x = gender, y = n, fill = detention_release_reason)) +
+  geom_col(position="fill") +
+  labs(title ="NWIPC detention stint release reason by gender")
+
+ggplotly(p1)
+
+```
+
+```{r}
 
 cscnwwa_transfers_by_gender_age <- cscnwwa_transfers %>% 
   mutate(age = year(book_in_date_time) - birth_year,

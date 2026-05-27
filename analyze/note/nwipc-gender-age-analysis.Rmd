@@ -1,0 +1,417 @@
+---
+title: "ICE ERO-LESA detention data Oct. 2022 - Mar. 2026"
+author: "UWCHR"
+date: "2026-04-01"
+output:
+    html_document:
+        html_preview: true
+        toc: true
+        toc_depth: 3
+        toc_float: true
+        code_folding: hide
+---
+
+
+```{r setup, message=FALSE, warning=FALSE, include=FALSE}
+
+options(scipen = 1000000)
+options(ggplot2.continuous.colour = "viridis")
+options(ggplot2.continuous.fill = "viridis")
+options(ggplot2.discrete.colour = "viridis")
+options(ggplot2.discrete.fill = "viridis")
+
+library(pacman)
+
+p_load(here, tidyverse, zoo, lubridate, ggplot2, plotly, gghighlight, viridis, readxl, digest, ggsankeyfier)
+
+every_nth = function(n) {
+  return(function(x) {x[c(TRUE, rep(FALSE, n - 1))]})
+}
+
+every_2nd_nth = function(n) {
+  return(function(x) {x[c(FALSE, rep(TRUE, n - 1))]})
+}
+
+arrests <- arrow::read_parquet("https://github.com/deportationdata/ice/raw/refs/heads/main/data/arrests-latest.parquet")
+
+detentions <- arrow::read_parquet("https://github.com/deportationdata/ice/raw/refs/heads/main/data/detention-stints-latest.parquet")
+
+headcount <- arrow::read_parquet("https://github.com/deportationdata/ice/raw/refs/heads/main/data/facilities-daily-population-latest.parquet")
+
+```
+
+```{r detain_setup, message=FALSE, warning=FALSE, include=FALSE}
+
+max_date <- max(detentions$book_in_date_time, na.rm=TRUE)
+
+detentions <- detentions %>%
+  filter(!is.na(stay_book_in_date_time),
+         !is.na(book_in_date_time)) %>%
+  mutate(stay_length = difftime(stay_book_out_date_time,
+            stay_book_in_date_time, unit='days'),
+         placement_length = difftime(book_out_date_time,
+            book_in_date_time, unit='days'),
+         stay_length_elapsed = difftime(replace_na(stay_book_out_date_time, max_date),
+            stay_book_in_date_time, unit='days'),
+         placement_length_elapsed = difftime(replace_na(book_out_date_time, max_date),
+            book_in_date_time, unit='days'),
+         initial_placement_exact = stay_book_in_date_time == book_in_date_time,
+         initial_placement_approx = date(stay_book_in_date_time) == date(book_in_date_time)
+         )
+
+detentions <- detentions %>%
+  filter(!is.na(unique_identifier)) %>%
+  group_by(unique_identifier) %>%
+  arrange(stay_book_in_date_time, book_in_date_time) %>%
+  mutate(total_stays = n_distinct(stay_book_in_date_time),
+         total_placements = n(),
+         current_stay = is.na(stay_book_out_date_time),
+         current_placement = is.na(book_out_date_time),
+         stay_count = data.table::rleid(stay_book_in_date_time)) %>%
+  ungroup()
+
+detentions <- detentions %>%
+  group_by(stay_ID) %>%
+  arrange(stay_book_in_date_time, book_in_date_time) %>%
+  mutate(placement_count = data.table::rleid(stint_ID),
+         stay_placements = n(),
+         n_facil = n_distinct(detention_facility_code),
+         first_facil = detention_facility_code[[1]],
+         last_facil = detention_facility_code[[length(detention_facility_code)]],
+         prev_facil = lag(detention_facility_code, n=1),
+         next_facil = lead(detention_facility_code, n=1),
+         longest_placement_facil = detention_facility_code[which.max(placement_length_elapsed)],
+         last_placement = placement_count == stay_placements,
+         longest_placement = placement_length_elapsed == max(placement_length_elapsed)
+         ) %>%
+  ungroup()
+
+```
+
+# Analysis
+
+(NA transfers/release reason mean still detained at NWIPC as of March 2026)
+
+```{r transfers_from_cscnwwa, message=FALSE, warning=FALSE, echo=FALSE}
+
+cscnwwa_detentions <- detentions %>% 
+  filter(detention_facility_code == "CSCNWWA")
+
+cscnwwa_transfers <- detentions %>% 
+  filter(detention_facility_code == "CSCNWWA",
+         detention_release_reason == "Transferred")
+
+cscnwwa_transfers_by_gender <- cscnwwa_transfers %>%
+  count(next_facil, gender)
+
+p1 <- cscnwwa_transfers_by_gender %>%
+  filter(gender != "Unknown") %>%
+  ggplot(aes(x = gender, y = n, fill = next_facil)) +
+  geom_col(position="fill") +
+  labs(title = "Transfer destinations from NWIPC by gender")
+
+ggplotly(p1)
+
+cscnwwa_bookouts_by_gender <- cscnwwa_detentions %>% 
+  filter(gender != "Unknown") %>%
+  mutate(detention_release_reason = case_when(str_detect(detention_release_reason, "Paroled") ~ "Paroled",
+                                              str_detect(detention_release_reason, "Order of Supervision") ~ "Order of supervision",
+                                              str_detect(detention_release_reason, "Order of Recognizance") ~ "Order of recognizance",
+                                              str_detect(detention_release_reason, "ORR") ~ "ORR",
+                                              str_detect(detention_release_reason, "Bonded Out") ~ "Bonded out",
+                                              TRUE ~ detention_release_reason)) %>% 
+  count(detention_release_reason, gender)
+
+p1 <- cscnwwa_bookouts_by_gender %>% 
+  filter(gender != "Unknown") %>% 
+  ggplot(aes(x = gender, y = n, fill = detention_release_reason)) +
+  geom_col(position="fill") +
+  labs(title ="NWIPC detention stint release reason by age, gender")
+
+ggplotly(p1)
+
+```
+
+```{r}
+
+cscnwwa_transfers_by_gender_age <- cscnwwa_transfers %>% 
+  mutate(age = year(book_in_date_time) - birth_year,
+         age_group = cut(age,
+                           breaks = c(0, 18, 25, 40, 60, Inf),
+                           right = FALSE)) %>% 
+  count(next_facil, gender, age_group)
+
+p1 <- cscnwwa_transfers_by_gender_age %>% 
+    filter(gender != "Unknown",
+         age_group != "[0,18)") %>% 
+  ggplot(aes(x = gender, y = n, fill = next_facil)) +
+  geom_col(position="fill") +
+  facet_wrap(~age_group) +
+  labs(title ="NWIPC transfer facility by age, gender")
+
+ggplotly(p1)
+
+
+cscnwwa_bookouts_by_gender_age <- cscnwwa_detentions %>% 
+  mutate(age = year(book_in_date_time) - birth_year,
+         age_group = cut(age,
+                           breaks = c(0, 18, 25, 40, 60, Inf),
+                           right = FALSE),
+         detention_release_reason = case_when(str_detect(detention_release_reason, "Paroled") ~ "Paroled",
+                                              str_detect(detention_release_reason, "Order of Supervision") ~ "Order of supervision",
+                                              str_detect(detention_release_reason, "Order of Recognizance") ~ "Order of recognizance",
+                                              str_detect(detention_release_reason, "ORR") ~ "ORR",
+                                              str_detect(detention_release_reason, "Bonded Out") ~ "Bonded out",
+                                              TRUE ~ detention_release_reason)) %>% 
+  count(detention_release_reason, gender, age_group)
+
+p1 <- cscnwwa_bookouts_by_gender_age %>% 
+  filter(gender != "Unknown",
+         age_group != "[0,18)") %>% 
+  ggplot(aes(x = gender, y = n, fill = detention_release_reason)) +
+  geom_col(position="fill") +
+  facet_wrap(~age_group) +
+  labs(title ="NWIPC detention stint release reason by age, gender")
+
+ggplotly(p1)
+
+```
+
+```{r}
+
+unique_stays <- detentions %>% 
+  distinct(stay_ID, .keep_all = TRUE)
+
+dat <- unique_stays %>% 
+  filter(gender != "Unknown",
+         !is.na(book_in_date_time)) %>% 
+  mutate(age = year(book_in_date_time) - birth_year,
+         age_group = cut(age,
+                           breaks = c(0, 18, 25, 40, 60, Inf),
+                           right = FALSE),
+         age_gender_group = paste(age_group, gender))
+
+p1 <- dat %>% 
+  ggplot(aes(y = age_gender_group, x = total_placements)) +
+  geom_boxplot()
+
+p1
+
+```
+
+```{r}
+
+p1 <- dat %>% 
+  filter(book_in_aor == "Miami Area of Responsibility") %>% 
+  ggplot(aes(y = age_gender_group, x = total_placements)) +
+  geom_boxplot() +
+  facet_wrap(~book_in_aor)
+
+p1
+
+p1 <- dat %>% 
+  filter(book_in_aor == "Seattle Area of Responsibility") %>% 
+  ggplot(aes(y = age_gender_group, x = total_placements)) +
+  geom_boxplot() +
+  facet_wrap(~book_in_aor)
+
+p1
+
+```
+
+```{r}
+
+dat <- unique_stays %>% 
+  filter(gender != "Unknown",
+         !is.na(book_in_date_time)) %>% 
+  mutate(age = year(book_in_date_time) - birth_year,
+         age_group = cut(age,
+                           breaks = c(0, 18, 25, 40, 60, Inf),
+                           right = FALSE),
+         age_gender_group = paste(age_group, gender),
+         det_since_2025 = year(stay_book_in_date_time) >= 2025,
+         stay_book_in_year = year(stay_book_in_date_time))
+
+p1 <- dat %>% 
+  filter(stay_book_in_year > 2021) %>% 
+  ggplot(aes(y = age_gender_group, x = total_placements)) +
+  geom_boxplot() +
+  facet_wrap(~stay_book_in_year)
+
+p1
+
+p2 <- dat %>% 
+  filter(stay_book_in_year > 2021) %>% 
+  ggplot(aes(y = as.factor(stay_book_in_year), x = total_placements)) +
+  geom_boxplot()
+
+p2
+
+p3 <- dat %>% 
+  filter(stay_book_in_year > 2021,
+         !is.na(age_group)) %>% 
+  ggplot(aes(y = as.factor(stay_book_in_year), x = total_placements)) +
+  geom_boxplot() +
+  facet_wrap(age_group~gender)
+
+p3
+
+
+p3 <- dat %>% 
+  filter(stay_book_in_year > 2021,
+         !is.na(age_group)) %>% 
+  ggplot(aes(y = age_gender_group, x = total_placements)) +
+  geom_boxplot() +
+  facet_wrap(~det_since_2025) +
+  labs(title = "Total detention placements by age/gender",
+       subtitle = "TRUE = detention stays starting since Jan. 1, 2025")
+
+p3
+```
+
+
+Would it be possible to see whether of women <40 booked into the Miami AOR in November 2025, the number of transfers looks unusual (compared to men booked into that region during that month; compared to overall people booked into that region during that month; compared to women <40 booked into other facilities nationwide in November 2025; compared to all people booked into other facilities nationwide in November 2025)? 
+
+```{r}
+
+nov_2025_bookins <- detentions %>% 
+  mutate(age = year(book_in_date_time) - birth_year,
+         age_group = cut(age,
+                           breaks = c(0, 18, 25, 40, 60, Inf),
+                           right = FALSE),
+         age_gender_group = paste(age_group, gender)) %>% 
+  filter(as.yearmon(stay_book_in_date_time) == as.yearmon("2025-11-01"),
+         gender != "Unknown",
+         !is.na(age),
+         age >= 18) %>% 
+  mutate(group = "natl")
+
+nov_2025_bookins_mia <- nov_2025_bookins %>% 
+  filter(book_in_aor == "Miami Area of Responsibility") %>% 
+  mutate(group = "mia")
+
+nov_2025_bookins_distinct <- nov_2025_bookins %>% 
+  distinct(stay_ID, .keep_all = TRUE)
+
+nov_2025_bookins_mia_distinct <- nov_2025_bookins_mia %>% 
+  distinct(stay_ID, .keep_all = TRUE)
+
+dat <- rbind(nov_2025_bookins_distinct, nov_2025_bookins_mia_distinct)
+
+p1 <- dat %>% 
+  ggplot(aes(x = total_placements, y = age_gender_group)) +
+  geom_boxplot() +
+  facet_wrap(~group) +
+  labs(title = "Detention stays starting in Nov. 2025, total stints by age/gender",
+       subtitle = "Women under 40 booked into Miami AOR experienced more transfers")
+
+p1
+
+```
+
+chart over time of the average number of transfers experienced by all people booked into Elizabeth Contract Detention Facility, Delaney Hall, or Moshannon Valley Processing Center?
+
+```{r}
+
+facil_list <- c('ELZICDF', 'DHDFNJ', 'MSVPCPA')
+
+detention_stays <- detentions %>% 
+  distinct(stay_ID, .keep_all = TRUE)
+
+dat_facil <- detention_stays %>% 
+  filter(stay_book_in_date_time >= "2022-10-01" &
+           stay_book_in_date_time <= "2025-12-31",
+         detention_facility_code %in% facil_list) %>% 
+  mutate(stay_book_in_month = as.yearmon(stay_book_in_date_time)) %>% 
+  group_by(detention_facility, detention_facility_code, stay_book_in_month) %>% 
+  summarize(avg_placements = mean(total_placements),
+            med_placements = median(total_placements)) %>% 
+  mutate(group = detention_facility) %>% 
+  ungroup() %>% 
+  dplyr::select(-c(detention_facility, detention_facility_code))
+
+dat_natl <- detention_stays %>% 
+  filter(stay_book_in_date_time >= "2022-10-01" &
+           stay_book_in_date_time <= "2025-12-31") %>% 
+  mutate(stay_book_in_month = as.yearmon(stay_book_in_date_time)) %>% 
+  group_by(stay_book_in_month) %>% 
+  summarize(avg_placements = mean(total_placements),
+            med_placements = median(total_placements)) %>% 
+  mutate(group = "NATIONWIDE")
+
+dat <- rbind(dat_natl, dat_facil)
+
+p1 <- dat %>%
+  ggplot(aes(x = stay_book_in_month, y = avg_placements, color = group)) +
+  geom_line() +
+  theme_minimal() +
+  labs(title = "Avg. number of detention stints by stay book-in month",
+       subtitle = "Selected facilities versus nationwide")
+
+p1
+
+```
+
+```{r}
+
+dat_natl <- detention_stays %>% 
+  filter(stay_book_in_date_time >= "2022-10-01" &
+           stay_book_in_date_time <= "2025-12-31") %>% 
+  mutate(stay_book_in_month = as.yearmon(stay_book_in_date_time)) %>% 
+  group_by(stay_book_in_month) %>% 
+  summarize(avg_placements = mean(total_placements),
+            med_placements = median(total_placements),
+            avg_n_facil = mean(n_facil),
+            med_n_facil = median(n_facil)) %>% 
+  mutate(group = "NATIONWIDE")
+
+dat_aor <- detention_stays %>% 
+  filter(stay_book_in_date_time >= "2022-10-01" &
+           stay_book_in_date_time <= "2025-12-31",
+         book_in_aor == "Miami Area of Responsibility") %>% 
+  mutate(stay_book_in_month = as.yearmon(stay_book_in_date_time)) %>% 
+  group_by(stay_book_in_month) %>% 
+  summarize(avg_placements = mean(total_placements),
+            med_placements = median(total_placements),
+            avg_n_facil = mean(n_facil),
+            med_n_facil = median(n_facil)) %>% 
+  mutate(group = "MIA")
+
+dat <- rbind(dat_natl, dat_aor)
+
+p1 <- dat %>% 
+  ggplot(aes(x = stay_book_in_month, y = avg_n_facil, color = group, group=group)) +
+  geom_line() +
+  ylim(0, NA) +
+  theme_minimal() +
+  labs(title = "Average number of unique facilities per stay",
+       subtitle = "By stay book-in month and AOR (Miami versus nationwide)")
+
+p1
+
+p2 <- dat %>% 
+  ggplot(aes(x = stay_book_in_month, y = avg_placements, color = group, group=group)) +
+  geom_line() +
+  ylim(0, NA) +
+  theme_minimal() +
+  labs(title = "Average number of detention stints per stay",
+       subtitle = "By stay book-in month and AOR (Miami versus nationwide)")
+
+p2
+
+write_delim(dat, "transfer_data.csv", delim=",")
+
+```
+
+```{r}
+
+b1 <- detention_stays %>% 
+  filter(stay_book_in_date_time >= "2022-10-01" &
+           stay_book_in_date_time <= "2025-12-31") %>% 
+  mutate(stay_book_in_month = as.yearmon(stay_book_in_date_time)) %>% 
+  ggplot(aes(x = stay_book_in_month, y = n_facil, group=stay_book_in_month)) +
+  geom_boxplot()
+
+b1
+
+```

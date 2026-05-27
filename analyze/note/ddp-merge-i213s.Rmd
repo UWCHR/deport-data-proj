@@ -1,0 +1,123 @@
+---
+title: "DDP merge"
+author: "UWCHR"
+date: "2026-04-08"
+output:
+    html_document:
+        html_preview: true
+        toc: true
+        toc_depth: 3
+        toc_float: true
+        code_folding: hide
+---
+
+```{r}
+
+library(tidyverse)
+
+vdigest <- Vectorize(digest::digest)
+
+# detention_stays <- arrow::read_parquet(
+#   "https://github.com/deportationdata/ice/raw/refs/heads/main/data/detention-stays-latest.parquet"
+# )
+# detention_stints <- arrow::read_parquet(
+#   "https://github.com/deportationdata/ice/raw/refs/heads/main/data/detention-stints-latest.parquet"
+# )
+arrests <- arrow::read_parquet(
+  "https://github.com/deportationdata/ice/raw/refs/heads/main/data/arrests-latest.parquet"
+)
+
+arrests <- arrests %>% 
+  filter(!duplicate_likely == TRUE)
+
+all_cols <- names(arrests)
+
+arrests <- arrests %>% rowwise() %>% 
+  unite(cols_to_hash, all_of(all_cols), sep = "", remove = FALSE) %>% 
+  mutate(hash = vdigest(cols_to_hash)) %>%
+  select(-c(cols_to_hash)) %>% 
+  arrange(desc(hash))
+
+stopifnot(sum(duplicated(arrests$hash)) == 0)
+
+i213s <- read_delim(here::here('analyze', 'input', 'natl-i213s-2025-09-25.csv.gz'), delim='|')
+
+i213s <- i213s %>% 
+  mutate(gender = case_when(gender_code == "M" ~ "Male",
+                            gender_code == "F" ~ "Female",
+                            gender_code == "U" ~ "Unknown",
+                            TRUE ~ NA_character_))
+
+# i213s dataset contains duplicate records
+i213s <- i213s %>% 
+  filter(!duplicated(hash))
+
+stopifnot(sum(duplicated(i213s$hash)) == 0)
+
+```
+
+```{r}
+
+arrest_merge_cols <- c("apprehension_date",
+                       "apprehension_aor",
+                       "apprehension_method",
+                       "apprehension_site_landmark",
+                       "citizenship_country",
+                       "gender")
+
+head(arrests[, arrest_merge_cols])
+
+```
+
+```{r}
+
+i213_merge_cols <- c("apprehension_date",
+                     "area_of_responsibility_name",
+                     "apprehension_method_descr",
+                     "apprehension_landmark_descr",
+                     "citizenship_country_descr",
+                     "gender")
+
+head(i213s[, i213_merge_cols])
+
+```
+
+```{r}
+
+arrests <- arrests %>% rowwise() %>% 
+  unite(cols_to_hash, all_of(arrest_merge_cols), sep = "", remove = FALSE) %>% 
+  mutate(merge_hash = vdigest(cols_to_hash)) %>%
+  select(-c(cols_to_hash)) %>% 
+  arrange(desc(merge_hash))
+
+arrests_ambig <-  arrests[duplicated(arrests$merge_hash) | duplicated(arrests$merge_hash, fromLast = TRUE), ]
+
+i213s <- i213s %>% rowwise() %>% 
+  unite(cols_to_hash, all_of(i213_merge_cols), sep = "", remove = FALSE) %>% 
+  mutate(merge_hash = vdigest(cols_to_hash)) %>%
+  select(-c(cols_to_hash)) %>% 
+  arrange(desc(merge_hash))
+
+i213s_ambig <-  i213s[duplicated(i213s$merge_hash) | duplicated(i213s$merge_hash, fromLast = TRUE), ]
+
+```
+
+```{r}
+
+# i213s_to_merge <- i213s %>% 
+#   dplyr::select(all_of(i213_merge_cols), "merge_hash", "child_count")
+# 
+# arrests_to_merge <- arrests %>% 
+#   dplyr::select(all_of(arrest_merge_cols), "merge_hash")
+# 
+# test_join <- left_join(arrests_to_merge, i213s_to_merge, by = c("citizenship_country" = "citizenship_country_descr", "gender" = "gender", "apprehension_date" = "apprehension_date", "apprehension_method" = "apprehension_method_descr", "apprehension_site_landmark" = "apprehension_landmark_descr", "apprehension_aor" = "area_of_responsibility_name"))
+
+arrests_subset <- arrests %>% 
+  dplyr::select(hash, merge_hash, unique_identifier)
+
+i213s_subset <- i213s %>% 
+  dplyr::select(hash, merge_hash)
+
+test_join <- left_join(arrests_subset, i213s_subset, by="merge_hash", suffix=c(".arrests", ".i213s"), relationship = "many-to-many")
+
+```
