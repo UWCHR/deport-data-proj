@@ -1,0 +1,76 @@
+---
+title: "ICE ERO-LESA detention data Oct. 2022 - Mar. 2026"
+author: "UWCHR"
+date: "2026-04-01"
+output:
+    html_document:
+        html_preview: true
+        toc: true
+        toc_depth: 3
+        toc_float: true
+        code_folding: hide
+---
+
+
+```{r setup, message=FALSE, warning=FALSE, include=FALSE}
+
+library(pacman)
+
+p_load(here, tidyverse, zoo, lubridate)
+
+detentions <- arrow::read_parquet("https://github.com/deportationdata/ice/raw/refs/heads/main/data/detention-stints-latest.parquet")
+
+```
+
+```{r detain_setup, message=FALSE, warning=FALSE, include=FALSE}
+
+max_date <- max(detentions$book_in_date_time, na.rm=TRUE)
+
+detentions <- detentions %>%
+  filter(!is.na(stay_book_in_date_time),
+         !is.na(book_in_date_time)) %>%
+  mutate(stay_length = difftime(stay_book_out_date_time,
+            stay_book_in_date_time, unit='days'),
+         placement_length = difftime(book_out_date_time,
+            book_in_date_time, unit='days'),
+         stay_length_elapsed = difftime(replace_na(stay_book_out_date_time, max_date),
+            stay_book_in_date_time, unit='days'),
+         placement_length_elapsed = difftime(replace_na(book_out_date_time, max_date),
+            book_in_date_time, unit='days'),
+         initial_placement_exact = stay_book_in_date_time == book_in_date_time,
+         initial_placement_approx = date(stay_book_in_date_time) == date(book_in_date_time)
+         )
+
+detentions <- detentions %>%
+  filter(!is.na(unique_identifier)) %>%
+  group_by(unique_identifier) %>%
+  arrange(stay_book_in_date_time, book_in_date_time) %>%
+  mutate(total_stays = n_distinct(stay_book_in_date_time),
+         total_placements = n(),
+         current_stay = is.na(stay_book_out_date_time),
+         current_placement = is.na(book_out_date_time),
+         stay_count = data.table::rleid(stay_book_in_date_time)) %>%
+  ungroup()
+
+detentions <- detentions %>%
+  group_by(stay_ID) %>%
+  arrange(stay_book_in_date_time, book_in_date_time) %>%
+  mutate(placement_count = data.table::rleid(stint_ID),
+         stay_placements = n(),
+         n_facil = n_distinct(detention_facility_code),
+         first_facil = detention_facility_code[[1]],
+         last_facil = detention_facility_code[[length(detention_facility_code)]],
+         prev_facil = lag(detention_facility_code, n=1),
+         next_facil = lead(detention_facility_code, n=1),
+         longest_placement_facil = detention_facility_code[which.max(placement_length_elapsed)],
+         last_placement = placement_count == stay_placements,
+         longest_placement = placement_length_elapsed == max(placement_length_elapsed)
+         ) %>%
+  ungroup()
+
+detention_stays <- detentions %>% 
+  distinct(stay_ID, .keep_all = TRUE)
+
+write_delim(detention_stays, here::here("detain-unique-stays", "output", "detention-stays-nov22-mar26.csv.gz"), delim='|')
+
+```
