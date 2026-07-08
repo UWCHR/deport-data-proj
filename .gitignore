@@ -16,3 +16,4 @@
 analyze/output/*
 write/output/*
 !share/input/facilities.csv.gz
+.positai

@@ -560,7 +560,7 @@ p1
 ```{r}
 
 uwchr <- uwchr %>% 
-  rename(apprehension_method = arrest_method) %>% 
+  # rename(apprehension_method = arrest_method) %>% 
   mutate(apprehension_method_simple = case_when(
     str_detect(apprehension_method, "CAP") ~ "Custodial Arrest",
     apprehension_method == "Criminal Alien Program" ~ "Custodial Arrest",
@@ -1011,3 +1011,59 @@ p1
 
 ```
 
+## Yak
+
+```{r}
+
+dat <- arrests %>% 
+  mutate(apprehension_method_simple = case_when(
+    str_detect(apprehension_method, "CAP") ~ "Custodial Arrest",
+    apprehension_method == "Criminal Alien Program" ~ "Custodial Arrest",
+    apprehension_method == "Custodial Arrest" ~ "Custodial Arrest",
+    # apprehension_method == "287(g) Program" ~ "287(g) Program",
+    apprehension_method == "Non-Custodial Arrest" ~ "Non-Custodial Arrest",
+    apprehension_method == "Located" ~ "Non-Custodial Arrest",
+    apprehension_method == "Worksite Enforcement" ~ "Non-Custodial Arrest",
+    # apprehension_method == "ERO Reprocessed Arrest" ~ "ERO Reprocessed Arrest",
+    TRUE ~ "All other methods"
+  ))
+
+arrests_yak <- dat %>% 
+  mutate(apprehension_site_landmark = str_to_upper(apprehension_site_landmark),
+         toa_current_duty_site = str_to_upper(toa_current_duty_site)) %>% 
+  filter(str_detect(apprehension_site_landmark, "YAK") | str_detect(toa_current_duty_site, "YAK"))
+
+p1 <- arrests_yak %>% 
+  filter(apprehension_date >= "2025-01-01") %>% 
+  mutate(week = floor_date(apprehension_date, unit = "week", week_start = "Monday")) %>% 
+  count(week) %>% 
+  ggplot(aes(x = week, y = n)) +
+  geom_col()
+
+p1
+
+p2 <- arrests_yak %>% 
+  filter(apprehension_date >= "2025-01-01") %>% 
+  mutate(week = floor_date(apprehension_date, unit = "week", week_start = "Monday"),
+         month = as.yearmon(apprehension_date)) %>%
+  count(month, apprehension_method_simple) %>% 
+  ggplot(aes(x = month, y = n, fill = apprehension_method_simple)) +
+  geom_col() +
+  labs(title = "Yakima ICE arrests by apprehension method")
+
+p2
+
+p3 <- arrests_yak %>% 
+  filter(apprehension_date >= "2025-01-01") %>% 
+  mutate(week = floor_date(apprehension_date, unit = "week", week_start = "Monday"),
+         month = as.yearmon(apprehension_date)) %>%
+  count(month, apprehension_site_landmark) %>% 
+  ggplot(aes(x = month, y = n, fill = apprehension_site_landmark)) +
+  geom_col() +
+  labs(title = "Yakima ICE arrests by apprehension landmark")
+
+p3
+
+write_delim(arrests_yak, here::here("analyze", "output", "arrests_yak.csv"), delim=",", na="")
+
+```
