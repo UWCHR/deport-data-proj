@@ -20,6 +20,13 @@ p_load(here, tidyverse, zoo, lubridate)
 
 detentions <- arrow::read_parquet("https://github.com/deportationdata/ice/raw/refs/heads/main/data/detention-stints-latest.parquet")
 
+facilities <- arrow::read_parquet("https://github.com/deportationdata/ice-detention-facilities/raw/refs/heads/main/data/facilities-latest.parquet")
+
+facilities_subset <- facilities %>% 
+  dplyr::select(detention_facility_code,
+                field_office) %>% 
+  rename(detention_facility_aor = field_office)
+
 ```
 
 ```{r detain_setup, message=FALSE, warning=FALSE, include=FALSE}
@@ -27,6 +34,7 @@ detentions <- arrow::read_parquet("https://github.com/deportationdata/ice/raw/re
 max_date <- max(detentions$book_in_date_time, na.rm=TRUE)
 
 detentions <- detentions %>%
+  left_join(facilities_subset, by = "detention_facility_code") %>% 
   filter(!is.na(stay_book_in_date_time),
          !is.na(book_in_date_time)) %>%
   mutate(stay_length = difftime(stay_book_out_date_time,
@@ -58,7 +66,11 @@ detentions <- detentions %>%
   mutate(placement_count = data.table::rleid(stint_ID),
          stay_placements = n(),
          n_facil = n_distinct(detention_facility_code),
+         n_states = n_distinct(state),
+         n_aors = n_distinct(detention_facility_aor),
          first_facil = detention_facility_code[[1]],
+         first_facil_state = state[[1]],
+         first_facil_aor = detention_facility_aor[[1]],
          last_facil = detention_facility_code[[length(detention_facility_code)]],
          prev_facil = lag(detention_facility_code, n=1),
          next_facil = lead(detention_facility_code, n=1),

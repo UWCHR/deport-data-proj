@@ -38,53 +38,9 @@ detentions <- arrow::read_parquet("https://github.com/deportationdata/ice/raw/re
 
 headcount <- arrow::read_parquet("https://github.com/deportationdata/ice/raw/refs/heads/main/data/facilities-daily-population-latest.parquet")
 
-```
+facilities <- arrow::read_parquet("https://github.com/deportationdata/ice-detention-facilities/raw/refs/heads/main/data/facilities-latest.parquet")
 
-```{r detain_setup, message=FALSE, warning=FALSE, include=FALSE}
-
-max_date <- max(detentions$book_in_date_time, na.rm=TRUE)
-
-detentions <- detentions %>%
-  filter(!is.na(stay_book_in_date_time),
-         !is.na(book_in_date_time)) %>%
-  mutate(stay_length = difftime(stay_book_out_date_time,
-            stay_book_in_date_time, unit='days'),
-         placement_length = difftime(book_out_date_time,
-            book_in_date_time, unit='days'),
-         stay_length_elapsed = difftime(replace_na(stay_book_out_date_time, max_date),
-            stay_book_in_date_time, unit='days'),
-         placement_length_elapsed = difftime(replace_na(book_out_date_time, max_date),
-            book_in_date_time, unit='days'),
-         initial_placement_exact = stay_book_in_date_time == book_in_date_time,
-         initial_placement_approx = date(stay_book_in_date_time) == date(book_in_date_time)
-         )
-
-detentions <- detentions %>%
-  filter(!is.na(unique_identifier)) %>%
-  group_by(unique_identifier) %>%
-  arrange(stay_book_in_date_time, book_in_date_time) %>%
-  mutate(total_stays = n_distinct(stay_book_in_date_time),
-         total_placements = n(),
-         current_stay = is.na(stay_book_out_date_time),
-         current_placement = is.na(book_out_date_time),
-         stay_count = data.table::rleid(stay_book_in_date_time)) %>%
-  ungroup()
-
-detentions <- detentions %>%
-  group_by(stay_ID) %>%
-  arrange(stay_book_in_date_time, book_in_date_time) %>%
-  mutate(placement_count = data.table::rleid(stint_ID),
-         stay_placements = n(),
-         n_facil = n_distinct(detention_facility_code),
-         first_facil = detention_facility_code[[1]],
-         last_facil = detention_facility_code[[length(detention_facility_code)]],
-         prev_facil = lag(detention_facility_code, n=1),
-         next_facil = lead(detention_facility_code, n=1),
-         longest_placement_facil = detention_facility_code[which.max(placement_length_elapsed)],
-         last_placement = placement_count == stay_placements,
-         longest_placement = placement_length_elapsed == max(placement_length_elapsed)
-         ) %>%
-  ungroup()
+detention_stays <- read_delim(here::here("detain-unique-stays", "output", "detention-stays-nov22-mar26.csv.gz"), delim='|')
 
 ```
 
@@ -179,10 +135,7 @@ ggplotly(p1)
 
 ```{r}
 
-unique_stays <- detentions %>% 
-  distinct(stay_ID, .keep_all = TRUE)
-
-dat <- unique_stays %>% 
+dat <- detention_stays %>% 
   filter(gender != "Unknown",
          !is.na(book_in_date_time)) %>% 
   mutate(age = year(book_in_date_time) - birth_year,
@@ -221,7 +174,7 @@ p1
 
 ```{r}
 
-dat <- unique_stays %>% 
+dat <- detention_stays %>% 
   filter(gender != "Unknown",
          !is.na(book_in_date_time)) %>% 
   mutate(age = year(book_in_date_time) - birth_year,
@@ -413,5 +366,156 @@ b1 <- detention_stays %>%
   geom_boxplot()
 
 b1
+
+```
+
+# Hold rooms
+
+```{r}
+
+detentions <- detentions %>% 
+  mutate(stint_length = difftime(book_out_date_time, book_in_date_time, units = "days"),
+         stint_over_72 = stint_length > 3,
+         holdroom = str_detect(detention_facility_code, "HOLD"))
+
+det_stint_summary <- detentions %>% 
+  group_by(detention_facility_code) %>% 
+  summarize(avg_stint = mean(stint_length, na.rm=TRUE),
+            med_stint = median(stint_length, na.rm=TRUE)) %>% 
+  ungroup()
+
+med_under_72 <- unlist(det_stint_summary[det_stint_summary$med_stint < 3, "detention_facility_code"])
+
+detentions <- detentions %>% 
+  mutate(med_stint_under_72 = detention_facility_code %in% med_under_72)
+
+p1 <- detentions %>% 
+  filter(book_in_date_time >= "2022-10-01") %>% 
+  filter(holdroom == TRUE) %>%
+  mutate(book_in_month = as.yearmon(book_in_date_time)) %>% 
+  ggplot(aes(x = book_in_month, y = log(as.numeric(stint_length)), group=book_in_month)) +
+  geom_boxplot() +
+  geom_hline(yintercept = log(3), color="red") +
+  labs(title = "Distribution of ICE hold room stint lengths by book-in month")
+
+p1
+
+```
+
+```{r}
+
+dat_natl <- detentions %>% 
+  filter(book_in_date_time >= "2022-10-01",
+         holdroom == TRUE) %>% 
+  mutate(book_in_month = as.yearmon(book_in_date_time)) %>% 
+  group_by(book_in_month) %>% 
+  summarize(n = n(),
+            avg_stint = mean(stint_length, na.rm=TRUE),
+            med_stint = median(stint_length, na.rm=TRUE),
+            n_stint_over_72 = sum(stint_over_72, na.rm=TRUE),
+            pct_stint_over_72 = n_stint_over_72 / n * 100
+            ) %>% 
+  mutate(group = "NATIONWIDE")
+
+write_delim(dat_natl, "ice_hold_room_summary.csv", delim=',')
+
+p1 <- dat_natl %>% 
+  ggplot(aes(x = book_in_month, y = n_stint_over_72)) +
+  geom_line() +
+  theme_minimal() +
+  labs(title = "ICE hold room detention stints longer than 72 hours",
+       subtitle = "By detention stint book-in month")
+
+p1
+
+```
+
+```{r}
+
+dat_per_facil <- detentions %>% 
+  filter(book_in_date_time >= "2022-10-01",
+         holdroom == TRUE) %>% 
+  mutate(book_in_month = as.yearmon(book_in_date_time)) %>% 
+  group_by(book_in_month, detention_facility_code) %>% 
+  summarize(n = n(),
+            avg_stint = mean(stint_length, na.rm=TRUE),
+            med_stint = median(stint_length, na.rm=TRUE),
+            n_stint_over_72 = sum(stint_over_72, na.rm=TRUE),
+            pct_stint_over_72 = n_stint_over_72 / n * 100
+            ) %>% 
+  mutate(group = detention_facility_code) %>% 
+  dplyr::select(-detention_facility_code)
+
+p1 <- dat_per_facil %>% 
+  filter(group == "IWAHOLD") %>% 
+  ggplot(aes(x = book_in_month, y = n_stint_over_72)) +
+  geom_line() +
+  theme_minimal() +
+  labs(title = "AROCC detention stints longer than 72 hours",
+       subtitle = "By detention stint book-in month")
+
+p1
+
+```
+
+```{r}
+
+dat <- rbind(dat_natl, dat_per_facil)
+
+p1 <- dat %>% 
+  filter(group %in% c("NATIONWIDE", "IWAHOLD")) %>% 
+  ggplot(aes(x = book_in_month, y = n_stint_over_72, color = group)) +
+  geom_line() +
+  theme_minimal() +
+  labs(title = "ICE hold room detention stints longer than 72 hours",
+       subtitle = "By detention stint book-in month")
+
+p1
+  
+
+```
+
+```{r}
+
+p1 <- detention_stays %>% 
+  ggplot(aes(y = first_facil_aor, x = n_aors)) +
+  geom_boxplot() +
+  scale_x_continuous(breaks=seq(1,10)) +
+  labs(title = "Distribution of detainee transfers",
+       subtitle = "total distinct AORs by book-in facility AOR")
+
+p1
+
+dat_natl <- detention_stays %>% 
+  filter(book_in_date_time >= "2022-10-01") %>% 
+  mutate(book_in_month = as.yearmon(book_in_date_time)) %>% 
+  group_by(book_in_month) %>% 
+  summarize(avg_aors = mean(n_aors, na.rm=TRUE),
+            med_aors = median(n_aors, na.rm=TRUE)) %>% 
+  ungroup() %>% 
+  mutate(group = "NATIONWIDE")
+
+dat_new <- detention_stays %>% 
+  filter(book_in_date_time >= "2022-10-01",
+         first_facil_aor == "Newark") %>% 
+  mutate(book_in_month = as.yearmon(book_in_date_time)) %>% 
+  group_by(book_in_month, first_facil_aor) %>% 
+  summarize(avg_aors = mean(n_aors, na.rm=TRUE),
+            med_aors = median(n_aors, na.rm=TRUE)) %>% 
+  ungroup() %>% 
+  dplyr::select(-first_facil_aor) %>% 
+  mutate(group = "NEW")
+
+dat <- rbind(dat_natl, dat_new)
+
+p2 <- dat %>% 
+  ggplot(aes(x = book_in_month, y = avg_aors, color = group, group=group)) +
+  geom_line() +
+  theme_minimal() +
+  labs(title = "Detainees experience more transfers between AORs",
+       subtitle = "By detention stay book-in month, nationwide versus Newark AOR")
+
+p2
+  
 
 ```

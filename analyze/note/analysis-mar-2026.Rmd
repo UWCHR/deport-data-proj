@@ -170,6 +170,67 @@ p1
 
 ```
 
+```{r}
+
+dat1 <- arrests %>% 
+  filter(apprehension_date >= "2011-10-01" &
+           apprehension_date <= "2026-03-31") %>% 
+  mutate(week = floor_date(apprehension_date, unit="week", week_start = "Monday"),
+         source = "ddp") %>% 
+  count(week, source)
+
+dat2 <- uwchr %>% 
+    filter(apprehension_date >= "2011-10-01" &
+           apprehension_date <= "2026-03-31") %>% 
+  mutate(week = floor_date(apprehension_date, unit="week", week_start = "Monday"),
+         source = "uwchr")%>% 
+  count(week, source)
+
+dat <- rbind(dat1, dat2)
+
+p1 <- dat %>% 
+  ggplot(aes(x = week, y = n, color = source)) +
+  geom_line() +
+  ylim(0, NA) +
+  labs(title = "Weekly total ICE arrests")
+
+p1
+
+```
+
+```{r}
+
+dat1 <- arrests %>% 
+  filter(apprehension_date >= "2011-10-01" &
+           apprehension_date <= "2026-03-31") %>% 
+  mutate(week = floor_date(apprehension_date, unit="week", week_start = "Monday"),
+         apprehension_aor = str_replace(apprehension_aor, " Area of Responsibility", ""),
+         source = "ddp") %>% 
+  count(week, apprehension_aor, source)
+
+uwchr
+
+dat2 <- uwchr %>% 
+    filter(apprehension_date >= "2011-10-01" &
+           apprehension_date <= "2026-03-31") %>% 
+  mutate(week = floor_date(apprehension_date, unit="week", week_start = "Monday"),
+         apprehension_aor = str_replace(area_of_responsibility, " Area of Responsibility", ""),
+         source = "uwchr")%>% 
+  count(week, apprehension_aor, source)
+
+dat <- rbind(dat1, dat2)
+
+p1 <- dat %>% 
+  ggplot(aes(x = week, y = n, color = apprehension_aor)) +
+  geom_line() +
+  ylim(0, NA) +
+  labs(title = "Weekly total ICE arrests") +
+  facet_wrap(~apprehension_aor)
+
+p1
+
+```
+
 During the same time period, the nationwide detained population peaked at over 70,000; it declined slightly in early 2026.
 
 ```{r national_headcount}

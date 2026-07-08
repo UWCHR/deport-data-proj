@@ -40,6 +40,9 @@ arrests <- arrests %>% rowwise() %>%
 
 stopifnot(sum(duplicated(arrests$hash)) == 0)
 
+arrests <- arrests %>% 
+  mutate(age = year(apprehension_date) - birth_year)
+
 i213s <- read_delim(here::here('analyze', 'input', 'natl-i213s-2025-09-25.csv.gz'), delim='|')
 
 i213s <- i213s %>% 
@@ -92,6 +95,8 @@ arrests <- arrests %>% rowwise() %>%
 
 arrests_ambig <-  arrests[duplicated(arrests$merge_hash) | duplicated(arrests$merge_hash, fromLast = TRUE), ]
 
+nrow(arrests_ambig)
+
 i213s <- i213s %>% rowwise() %>% 
   unite(cols_to_hash, all_of(i213_merge_cols), sep = "", remove = FALSE) %>% 
   mutate(merge_hash = vdigest(cols_to_hash)) %>%
@@ -99,6 +104,8 @@ i213s <- i213s %>% rowwise() %>%
   arrange(desc(merge_hash))
 
 i213s_ambig <-  i213s[duplicated(i213s$merge_hash) | duplicated(i213s$merge_hash, fromLast = TRUE), ]
+
+nrow(i213s_ambig)
 
 ```
 
@@ -113,11 +120,90 @@ i213s_ambig <-  i213s[duplicated(i213s$merge_hash) | duplicated(i213s$merge_hash
 # test_join <- left_join(arrests_to_merge, i213s_to_merge, by = c("citizenship_country" = "citizenship_country_descr", "gender" = "gender", "apprehension_date" = "apprehension_date", "apprehension_method" = "apprehension_method_descr", "apprehension_site_landmark" = "apprehension_landmark_descr", "apprehension_aor" = "area_of_responsibility_name"))
 
 arrests_subset <- arrests %>% 
-  dplyr::select(hash, merge_hash, unique_identifier)
+  dplyr::select(hash, merge_hash, unique_identifier, age)
 
 i213s_subset <- i213s %>% 
-  dplyr::select(hash, merge_hash)
+  dplyr::select(hash, merge_hash, age, child_count)
 
 test_join <- left_join(arrests_subset, i213s_subset, by="merge_hash", suffix=c(".arrests", ".i213s"), relationship = "many-to-many")
+
+test_join_filtered <- test_join %>% 
+  filter(age.arrests == age.i213s | age.arrests == age.i213s + 1 | age.arrests == age.i213s -1) %>% 
+  group_by(unique_identifier) %>% 
+  mutate(n = n()) %>% 
+  ungroup() %>% 
+  arrange(desc(unique_identifier))
+
+unambig_match <- test_join_filtered %>% 
+  filter(n == 1)
+
+```
+
+```{r}
+
+child_unambig <- unambig_match %>% 
+  dplyr::select(unique_identifier, child_count)
+
+arrests_unambig <- arrests %>% 
+  filter(unique_identifier %in% unambig_match$unique_identifier) %>% 
+  left_join(child_unambig, by = "unique_identifier") %>% 
+  mutate(parent = !is.na(child_count))
+
+dat <- arrests_unambig %>% 
+  count(gender, parent)
+
+```
+
+```{r}
+
+detention_stays <- read_delim(here::here("detain-unique-stays", "output", "detention-stays-nov22-mar26.csv.gz"), delim='|')
+
+det_stays_unambig <- detention_stays %>% 
+  filter(unique_identifier %in% unambig_match$unique_identifier,
+         gender != "Unknown",
+         !is.na(book_in_date_time)) %>% 
+  left_join(child_unambig, by = "unique_identifier") %>% 
+  mutate(parent = !is.na(child_count),
+         age = year(book_in_date_time) - birth_year,
+         age_group = cut(age,
+                           breaks = c(0, 18, 25, 40, 60, Inf),
+                           right = FALSE),
+         age_gender_group = paste(age_group, gender)) 
+
+p1 <- det_stays_unambig %>% 
+  filter(age >= 18) %>% 
+  ggplot(aes(x = n_facil, y = parent)) +
+  geom_boxplot() +
+  facet_wrap(age_group~gender)
+
+p1
+
+p2 <- det_stays_unambig %>% 
+  filter(age >= 18,
+         book_in_aor == "Miami Area of Responsibility") %>% 
+  ggplot(aes(x = n_facil, y = parent)) +
+  geom_boxplot() +
+  facet_wrap(age_group~gender)
+
+p2
+
+```
+
+```{r}
+
+dat_natl <- det_stays_unambig %>% 
+  filter(age >= 18) %>% 
+  mutate(group = "NATIONWIDE")
+
+dat_mia <- det_stays_unambig %>% 
+  filter(age >= 18,
+         book_in_aor == "Miami Area of Responsibility") %>%
+  mutate(group = "MIAMI")
+
+dat <- rbind(dat_natl, dat_mia)
+
+dat %>% ggplot(aes(x = n_facil, y = parent)) +
+  geom_boxplot() +
+  facet_wrap(age_gender_group~group)
 
 ```
